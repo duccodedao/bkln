@@ -1,11 +1,25 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db, googleProvider } from '../firebase';
-import { onAuthStateChanged, User, signInWithPopup, signOut } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  User, 
+  signInWithPopup, 
+  signOut, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  ConfirmationResult
+} from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 export interface UserProfile {
   uid: string;
   email: string;
+  phoneNumber?: string;
   displayName: string;
   organization: string;
   isPremium: boolean;
@@ -21,7 +35,10 @@ interface AuthContextType {
   isGlobalPremium: boolean;
   loading: boolean;
   needsProfileSetup: boolean;
-  login: () => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  loginWithEmail: (email: string, pass: string, remember: boolean) => Promise<void>;
+  registerWithEmail: (email: string, pass: string) => Promise<void>;
+  loginWithPhone: (phone: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
   logout: () => Promise<void>;
   setupProfile: (name: string, org: string) => Promise<void>;
 }
@@ -52,7 +69,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setProfile(docSnap.data() as UserProfile);
           setNeedsProfileSetup(false);
           
-          // Listen to profile changes (e.g., admin blocking or granting premium)
           onSnapshot(docRef, (snap) => {
             if (snap.exists()) {
               setProfile(snap.data() as UserProfile);
@@ -68,13 +84,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    // Listen to global settings
     const globalRef = doc(db, 'settings', 'global');
     const unsubGlobal = onSnapshot(globalRef, (snap) => {
       if (snap.exists()) {
         setIsGlobalPremium(snap.data().isGlobalPremium || false);
       } else {
-        // Create if not exists
         setDoc(globalRef, { isGlobalPremium: false }).catch(console.error);
       }
     }, (error) => {
@@ -87,12 +101,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async () => {
+  const loginWithGoogle = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
       console.error('Login error:', error);
+      throw error;
     }
+  };
+
+  const loginWithEmail = async (email: string, pass: string, remember: boolean) => {
+    await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+    await signInWithEmailAndPassword(auth, email, pass);
+  };
+
+  const registerWithEmail = async (email: string, pass: string) => {
+    await createUserWithEmailAndPassword(auth, email, pass);
+  };
+
+  const loginWithPhone = async (phone: string, appVerifier: RecaptchaVerifier) => {
+    return await signInWithPhoneNumber(auth, phone, appVerifier);
   };
 
   const logout = async () => {
@@ -114,11 +142,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newProfile: UserProfile = {
       uid: user.uid,
       email: user.email || '',
+      phoneNumber: user.phoneNumber || '',
       displayName: name,
       organization: org,
       isPremium: false,
       isBlocked: false,
-      role: user.email === 'sonlyhongduc@gmail.com' ? 'admin' : 'user',
+      role: (user.email === 'sonlyhongduc@gmail.com') ? 'admin' : 'user',
       lastIp: ip,
       createdAt: Date.now(),
     };
@@ -129,7 +158,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, isGlobalPremium, loading, needsProfileSetup, login, logout, setupProfile }}>
+    <AuthContext.Provider value={{ 
+      user, profile, isGlobalPremium, loading, needsProfileSetup, 
+      loginWithGoogle, loginWithEmail, registerWithEmail, loginWithPhone,
+      logout, setupProfile 
+    }}>
       {children}
     </AuthContext.Provider>
   );
