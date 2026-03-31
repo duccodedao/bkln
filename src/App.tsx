@@ -1,6 +1,9 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileOutput, Activity, Droplet, Settings, Calendar } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileOutput, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert } from 'lucide-react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import AdminPanel from './components/AdminPanel';
+import UpgradeModal from './components/UpgradeModal';
 
 const THA_COLUMNS = [
   'Họ tên (*)', 'Giới tính (*)', 'Năm sinh (*)', 'Mã BHYT (*)', 'Số CMT/CCCD (*)',
@@ -24,7 +27,45 @@ const DTD_COLUMNS = [
   'Biến chứng', 'Kết quả điều trị', 'Ngày tái khám'
 ];
 
-export default function App() {
+function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) => void }) {
+  const [name, setName] = useState('');
+  const [org, setOrg] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !org) return;
+    setLoading(true);
+    await onSubmit(name, org);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Hoàn tất hồ sơ</h2>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tên Cá nhân</label>
+            <input required type="text" value={name} onChange={e => setName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Nhập họ và tên" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tên Đơn vị</label>
+            <input required type="text" value={org} onChange={e => setOrg(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Nhập tên cơ quan / đơn vị" />
+          </div>
+          <button disabled={loading} type="submit" className="w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
+            {loading ? 'Đang lưu...' : 'Lưu thông tin'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function MainApp() {
+  const { user, profile, isGlobalPremium, logout, needsProfileSetup, setupProfile, login, loading } = useAuth();
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
   const [inputData, setInputData] = useState<any[]>([]);
   const [outputDataTHA, setOutputDataTHA] = useState<any[]>([]);
   const [outputDataDTD, setOutputDataDTD] = useState<any[]>([]);
@@ -33,7 +74,6 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<'THA' | 'DTD'>('THA');
   
-  // New states for features
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [genderFormat, setGenderFormat] = useState<'text' | 'number'>('text');
@@ -42,6 +82,58 @@ export default function App() {
   const [showBsConfig, setShowBsConfig] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50">Đang tải...</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full text-center">
+          <Activity size={48} className="mx-auto text-blue-600 mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Chuyển Đổi Dữ Liệu</h2>
+          <p className="text-gray-500 mb-6">Vui lòng đăng nhập để sử dụng hệ thống.</p>
+          <button onClick={login} className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+            Đăng nhập bằng Google
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (needsProfileSetup) {
+    return <ProfileSetupForm onSubmit={setupProfile} />;
+  }
+
+  if (profile?.isBlocked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full text-center">
+          <ShieldAlert size={48} className="mx-auto text-red-500 mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Tài khoản bị khóa</h2>
+          <p className="text-gray-500 mb-6">Tài khoản của bạn đã bị quản trị viên khóa. Vui lòng liên hệ để biết thêm chi tiết.</p>
+          <button onClick={logout} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200">Đăng xuất</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (showAdmin && profile?.role === 'admin') {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8 font-sans">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-900">Quản trị hệ thống</h1>
+            <button onClick={() => setShowAdmin(false)} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Quay lại App</button>
+          </div>
+          <AdminPanel />
+        </div>
+      </div>
+    );
+  }
+
+  const hasPremiumAccess = profile?.role === 'admin' || profile?.isPremium || isGlobalPremium;
 
   const transformData = (data: any[], currentGenderFormat: 'text' | 'number') => {
     const currentYear = new Date().getFullYear();
@@ -78,7 +170,7 @@ export default function App() {
         'Số CMT/CCCD (*)': '',
         'Số điện thoại': '',
         'Địa chỉ': row['DIA_CHI'] || '',
-        'Xã/Phường/Thị trấn (*)': '31831', // Auto-fill
+        'Xã/Phường/Thị trấn (*)': '31831',
         'Ngày phát hiện bệnh': '',
         'Nơi phát hiện': '',
         'Ngày khám (*)': row['NGAYRA'] || '',
@@ -186,6 +278,7 @@ export default function App() {
   };
 
   const handleGenderFormatChange = (format: 'text' | 'number') => {
+    if (!hasPremiumAccess) return setShowUpgrade(true);
     setGenderFormat(format);
     const updateGender = (data: any[]) => data.map(row => {
       let current = row['Giới tính (*)'];
@@ -205,6 +298,7 @@ export default function App() {
   };
 
   const handleApplyBloodSugar = () => {
+    if (!hasPremiumAccess) return setShowUpgrade(true);
     const min = parseFloat(bsMin);
     const max = parseFloat(bsMax);
     if (isNaN(min) || isNaN(max) || min > max) {
@@ -240,7 +334,7 @@ export default function App() {
   };
 
   const getFilteredData = (data: any[]) => {
-    if (!startDate || !endDate) return data;
+    if (!startDate || !endDate || !hasPremiumAccess) return data;
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
     const end = new Date(endDate);
@@ -257,7 +351,7 @@ export default function App() {
   const filteredDTD = getFilteredData(outputDataDTD);
 
   const handleDownload = () => {
-    if (!startDate || !endDate) {
+    if (hasPremiumAccess && (!startDate || !endDate)) {
       setError('Bắt buộc phải chọn "Từ ngày" và "Đến ngày" trước khi tải xuống.');
       return;
     }
@@ -307,9 +401,26 @@ export default function App() {
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
       <div className="max-w-6xl mx-auto space-y-8">
         
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Chuyển Đổi Dữ Liệu Bệnh Nhân</h1>
-          <p className="text-gray-500">Tự động phân loại Tăng Huyết Áp (I10) và Đái Tháo Đường (E11.9).</p>
+        {/* Header */}
+        <div className="flex justify-between items-start">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Chuyển Đổi Dữ Liệu Bệnh Nhân</h1>
+            <p className="text-gray-500">Tự động phân loại Tăng Huyết Áp (I10) và Đái Tháo Đường (E11.9).</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-medium text-gray-900">{profile?.displayName}</p>
+              <p className="text-xs text-gray-500">{profile?.organization}</p>
+            </div>
+            {profile?.role === 'admin' && (
+              <button onClick={() => setShowAdmin(true)} className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200" title="Admin Panel">
+                <Shield size={20} />
+              </button>
+            )}
+            <button onClick={logout} className="p-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300" title="Đăng xuất">
+              <LogOut size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Upload Area */}
@@ -353,7 +464,17 @@ export default function App() {
           <div className="space-y-6">
             
             {/* Settings & Filters Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative overflow-hidden">
+              {!hasPremiumAccess && (
+                <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+                  <Lock size={32} className="text-gray-400 mb-2" />
+                  <p className="text-gray-700 font-medium mb-4">Tính năng nâng cao đã bị khóa</p>
+                  <button onClick={() => setShowUpgrade(true)} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm">
+                    Mở khóa ngay
+                  </button>
+                </div>
+              )}
+              
               <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <Settings size={20} className="mr-2 text-gray-500" />
                 Cài đặt & Bộ lọc
@@ -371,6 +492,7 @@ export default function App() {
                       className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
                       value={startDate} 
                       onChange={e => setStartDate(e.target.value)} 
+                      disabled={!hasPremiumAccess}
                     />
                     <span className="text-gray-500">-</span>
                     <input 
@@ -378,6 +500,7 @@ export default function App() {
                       className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
                       value={endDate} 
                       onChange={e => setEndDate(e.target.value)} 
+                      disabled={!hasPremiumAccess}
                     />
                   </div>
                 </div>
@@ -394,6 +517,7 @@ export default function App() {
                         checked={genderFormat === 'text'} 
                         onChange={() => handleGenderFormatChange('text')} 
                         className="text-blue-600 focus:ring-blue-500" 
+                        disabled={!hasPremiumAccess}
                       />
                       <span className="text-sm text-gray-700">Nam / Nữ</span>
                     </label>
@@ -405,6 +529,7 @@ export default function App() {
                         checked={genderFormat === 'number'} 
                         onChange={() => handleGenderFormatChange('number')} 
                         className="text-blue-600 focus:ring-blue-500" 
+                        disabled={!hasPremiumAccess}
                       />
                       <span className="text-sm text-gray-700">01 / 02</span>
                     </label>
@@ -417,7 +542,8 @@ export default function App() {
                   {!showBsConfig ? (
                     <button 
                       onClick={() => setShowBsConfig(true)} 
-                      className="px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium transition-colors w-full h-10"
+                      disabled={!hasPremiumAccess}
+                      className="px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium transition-colors w-full h-10 disabled:opacity-50"
                     >
                       Điền tự động Đường huyết
                     </button>
@@ -429,6 +555,7 @@ export default function App() {
                         className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-full focus:ring-2 focus:ring-indigo-500 outline-none" 
                         value={bsMin} 
                         onChange={e => setBsMin(e.target.value)} 
+                        disabled={!hasPremiumAccess}
                       />
                       <span className="text-gray-500">-</span>
                       <input 
@@ -437,10 +564,12 @@ export default function App() {
                         className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-full focus:ring-2 focus:ring-indigo-500 outline-none" 
                         value={bsMax} 
                         onChange={e => setBsMax(e.target.value)} 
+                        disabled={!hasPremiumAccess}
                       />
                       <button 
                         onClick={handleApplyBloodSugar} 
-                        className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                        disabled={!hasPremiumAccess}
+                        className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
                       >
                         Áp dụng
                       </button>
@@ -549,6 +678,15 @@ export default function App() {
         )}
 
       </div>
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }
