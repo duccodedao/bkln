@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileOutput, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileOutput, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw, ShieldCheck, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AdminPanel from './components/AdminPanel';
@@ -30,25 +30,7 @@ const DTD_COLUMNS = [
 ];
 
 function AdministrativeUnitModal({ onSelect, onClose }: { onSelect: (code: string) => void, onClose: () => void }) {
-  const [provinces, setProvinces] = useState<any[]>([]);
-  const [selectedProvince, setSelectedProvince] = useState<string>('');
-  const [selectedWard, setSelectedWard] = useState<string>('');
   const [manualCode, setManualCode] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('/data.json')
-      .then(res => res.json())
-      .then(data => {
-        setProvinces(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setLoading(false);
-      });
-  }, []);
-
-  const provinceData = provinces.find(p => p.province_code === selectedProvince);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -59,40 +41,6 @@ function AdministrativeUnitModal({ onSelect, onClose }: { onSelect: (code: strin
         </h3>
         
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tỉnh / Thành phố</label>
-            <select 
-              className="w-full border border-gray-300 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500"
-              value={selectedProvince}
-              onChange={(e) => { setSelectedProvince(e.target.value); setSelectedWard(''); }}
-            >
-              <option value="">-- Chọn Tỉnh/Thành phố --</option>
-              {provinces.map(p => (
-                <option key={p.province_code} value={p.province_code}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Xã / Phường / Thị trấn</label>
-            <select 
-              className="w-full border border-gray-300 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500"
-              value={selectedWard}
-              onChange={(e) => setSelectedWard(e.target.value)}
-              disabled={!selectedProvince}
-            >
-              <option value="">-- Chọn Xã/Phường --</option>
-              {provinceData?.wards.map((w: any) => (
-                <option key={w.ward_code} value={w.ward_code}>{w.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="relative flex items-center justify-center">
-            <div className="border-t border-gray-200 w-full"></div>
-            <span className="bg-white px-4 text-xs text-gray-400 absolute uppercase">Hoặc nhập mã thủ công</span>
-          </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Mã hành chính</label>
             <input 
@@ -108,8 +56,8 @@ function AdministrativeUnitModal({ onSelect, onClose }: { onSelect: (code: strin
         <div className="flex space-x-3 mt-6">
           <button onClick={onClose} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200">Hủy</button>
           <button 
-            onClick={() => onSelect(manualCode || selectedWard)} 
-            disabled={!manualCode && !selectedWard}
+            onClick={() => onSelect(manualCode)} 
+            disabled={!manualCode}
             className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
           >
             Xác nhận
@@ -217,7 +165,11 @@ function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) 
 }
 
 function MainApp() {
-  const { user, profile, isGlobalPremium, logout, needsProfileSetup, setupProfile, loading: authLoading } = useAuth();
+  const { 
+    user, profile, isGlobalPremium, 
+    filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium,
+    logout, needsProfileSetup, setupProfile, loading: authLoading 
+  } = useAuth();
   const [showAdmin, setShowAdmin] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdminUnit, setShowAdminUnit] = useState(false);
@@ -240,6 +192,7 @@ function MainApp() {
   const [bsMax, setBsMax] = useState<string>('');
   const [showBsConfig, setShowBsConfig] = useState(false);
   const [adminUnitCode, setAdminUnitCode] = useState('');
+  const [removeDuplicates, setRemoveDuplicates] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -296,74 +249,108 @@ function MainApp() {
     const thaData: any[] = [];
     const dtdData: any[] = [];
 
-    data.forEach((row, index) => {
+    const getVal = (row: any, keys: string[]) => {
+      for (const key of keys) {
+        if (row[key] !== undefined && row[key] !== null && row[key] !== '') return row[key];
+      }
+      return '';
+    };
+
+    data.forEach((row) => {
       let gender = '';
-      let birthDate = '';
+      let birthYear = '';
       
-      if (row['NAM'] !== undefined && row['NAM'] !== '') {
+      // Try to find gender and age/birth year
+      const namVal = getVal(row, ['NAM', 'Nam', 'Male']);
+      const nuVal = getVal(row, ['NU', 'Nữ', 'Female']);
+      const gioiTinhVal = getVal(row, ['GIOI_TINH', 'Giới tính', 'Gender']);
+      const namSinhVal = getVal(row, ['NAM_SINH', 'Năm sinh', 'BirthYear', 'YearOfBirth']);
+      const tuoiVal = getVal(row, ['TUOI', 'Tuổi', 'Age']);
+
+      if (namVal !== '') {
         gender = currentGenderFormat === 'number' ? '01' : 'Nam';
-        const age = parseInt(row['NAM'], 10);
-        if (!isNaN(age)) {
-          birthDate = `01/01/${currentYear - age}`;
-        }
-      } else if (row['NU'] !== undefined && row['NU'] !== '') {
+        const age = parseInt(namVal, 10);
+        if (!isNaN(age) && age < 150) birthYear = String(currentYear - age);
+        else birthYear = String(namVal);
+      } else if (nuVal !== '') {
         gender = currentGenderFormat === 'number' ? '02' : 'Nữ';
-        const age = parseInt(row['NU'], 10);
-        if (!isNaN(age)) {
-          birthDate = `01/01/${currentYear - age}`;
+        const age = parseInt(nuVal, 10);
+        if (!isNaN(age) && age < 150) birthYear = String(currentYear - age);
+        else birthYear = String(nuVal);
+      } else if (gioiTinhVal !== '') {
+        const gt = String(gioiTinhVal).toLowerCase();
+        if (gt.includes('nam') || gt === '1' || gt === 'm' || gt === 'male') {
+          gender = currentGenderFormat === 'number' ? '01' : 'Nam';
+        } else if (gt.includes('nữ') || gt.includes('nu') || gt === '2' || gt === 'f' || gt === 'female') {
+          gender = currentGenderFormat === 'number' ? '02' : 'Nữ';
         }
       }
 
-      const diagnosis = row['CHAN_DOAN'] || '';
-      const hasTHA = diagnosis.includes('I10');
-      const hasDTD = diagnosis.includes('E11.9');
+      if (birthYear === '') {
+        if (namSinhVal !== '') {
+          birthYear = String(namSinhVal);
+        } else if (tuoiVal !== '') {
+          const age = parseInt(tuoiVal, 10);
+          if (!isNaN(age)) birthYear = String(currentYear - age);
+        }
+      }
+
+      // Ensure birthYear is just the year
+      if (birthYear.length > 4) {
+        const match = birthYear.match(/\d{4}/);
+        if (match) birthYear = match[0];
+      }
+
+      const diagnosis = getVal(row, ['CHAN_DOAN', 'Chẩn đoán', 'MA_BENH', 'ICD10']) || '';
+      const hasTHA = diagnosis.includes('I10') || diagnosis.includes('I11') || diagnosis.includes('I12') || diagnosis.includes('I13') || diagnosis.includes('I15');
+      const hasDTD = diagnosis.includes('E10') || diagnosis.includes('E11') || diagnosis.includes('E12') || diagnosis.includes('E13') || diagnosis.includes('E14');
 
       const commonFields = {
-        'Họ tên (*)': row['TEN_BENH_NHAN'] || '',
+        'Họ tên (*)': getVal(row, ['TEN_BENH_NHAN', 'HO_TEN', 'Họ tên', 'Tên bệnh nhân']),
         'Giới tính (*)': gender,
-        'Năm sinh (*)': birthDate,
-        'Mã BHYT (*)': row['SO_THE_BHYT'] || '',
-        'Số CMT/CCCD (*)': '',
-        'Số điện thoại': '',
-        'Địa chỉ': row['DIA_CHI'] || '',
+        'Năm sinh (*)': birthYear,
+        'Mã BHYT (*)': getVal(row, ['SO_THE_BHYT', 'MA_THE', 'Mã BHYT', 'Số thẻ BHYT']),
+        'Số CMT/CCCD (*)': getVal(row, ['SO_CMT', 'CMND', 'CCCD', 'Số CMT/CCCD']),
+        'Số điện thoại': getVal(row, ['DIEN_THOAI', 'Số điện thoại', 'SDT', 'Phone']),
+        'Địa chỉ': getVal(row, ['DIA_CHI', 'Địa chỉ']),
         'Xã/Phường/Thị trấn (*)': currentAdminUnit || '',
-        'Ngày phát hiện bệnh': '',
-        'Nơi phát hiện': '',
-        'Ngày khám (*)': row['NGAYRA'] || '',
+        'Ngày phát hiện bệnh': getVal(row, ['NGAY_PHAT_HIEN', 'Ngày phát hiện']),
+        'Nơi phát hiện': getVal(row, ['NOI_PHAT_HIEN', 'Nơi phát hiện']),
+        'Ngày khám (*)': getVal(row, ['NGAYRA', 'NGAY_KHAM', 'Ngày khám', 'Ngày ra']),
         'Phân loại BN (*)': '',
-        'HA tâm thu (*)': row['Huyết áp cao'] || '',
-        'HA tâm trương (*)': row['Huyết áp thấp'] || '',
-        'Cân nặng': row['Cân nặng'] || '',
-        'Chiều cao': row['Chiều cao'] || '',
-        'Vòng eo': '',
-        'Hút thuốc lá': '',
-        'Mức độ uống rượu bia': '',
-        'Thực hành giảm ăn muối': '',
-        'Hoạt động thể lực đủ theo khuyến nghị': '',
+        'HA tâm thu (*)': getVal(row, ['HUYET_AP_CAO', 'HA_TAM_THU', 'Huyết áp cao', 'HA tâm thu']),
+        'HA tâm trương (*)': getVal(row, ['HUYET_AP_THAP', 'HA_TAM_TRUONG', 'Huyết áp thấp', 'HA tâm trương']),
+        'Cân nặng': getVal(row, ['CAN_NANG', 'Cân nặng', 'Weight']),
+        'Chiều cao': getVal(row, ['CHIEU_CAO', 'Chiều cao', 'Height']),
+        'Vòng eo': getVal(row, ['VONG_EO', 'Vòng eo']),
+        'Hút thuốc lá': getVal(row, ['HUT_THUOC', 'Hút thuốc lá']),
+        'Mức độ uống rượu bia': getVal(row, ['RUOU_BIA', 'Mức độ uống rượu bia']),
+        'Thực hành giảm ăn muối': getVal(row, ['GIAM_AN_MUOI', 'Thực hành giảm ăn muối']),
+        'Hoạt động thể lực đủ theo khuyến nghị': getVal(row, ['HOAT_DONG_THE_LUC', 'Hoạt động thể lực']),
         'Chẩn đoán': diagnosis,
-        'Thuốc điều trị': row['CHAN_DOAN_KKB'] || '',
-        'Số ngày nhận thuốc': '',
-        'Biến chứng': '',
-        'Kết quả điều trị': '',
-        'Ngày tái khám': ''
+        'Thuốc điều trị': getVal(row, ['CHAN_DOAN_KKB', 'THUOC', 'Thuốc điều trị', 'Đơn thuốc']),
+        'Số ngày nhận thuốc': getVal(row, ['SO_NGAY_CAP', 'Số ngày nhận thuốc', 'Số ngày']),
+        'Biến chứng': getVal(row, ['BIEN_CHUNG', 'Biến chứng']),
+        'Kết quả điều trị': getVal(row, ['KET_QUA_DIEU_TRI', 'Kết quả điều trị']) || '',
+        'Ngày tái khám': getVal(row, ['NGAY_TAI_KHAM', 'Ngày tái khám'])
       };
 
       if (hasTHA) {
         thaData.push({
           ...commonFields,
-          'Ăn đủ 400g rau và trái cây': '',
+          'Ăn đủ 400g rau và trái cây': getVal(row, ['AN_RAU_TRAI_CAY', 'Ăn đủ 400g rau']),
         });
       }
 
       if (hasDTD) {
         dtdData.push({
           ...commonFields,
-          'Đường huyết (*)': '',
-          'HbA1C': '',
-          'Rối loạn lipid máu (*)': '',
-          'Thực hành ăn uống hợp lý': '',
-          'Theo dõi biến chứng bàn chân': '',
-          'Biết xử lý hạ đường huyết': '',
+          'Đường huyết (*)': getVal(row, ['DUONG_HUYET', 'Đường huyết', 'BloodSugar']),
+          'HbA1C': getVal(row, ['HBA1C', 'HbA1C']),
+          'Rối loạn lipid máu (*)': getVal(row, ['ROI_LOAN_LIPID', 'Rối loạn lipid máu']),
+          'Thực hành ăn uống hợp lý': getVal(row, ['AN_UONG_HOP_LY', 'Thực hành ăn uống hợp lý']),
+          'Theo dõi biến chứng bàn chân': getVal(row, ['BIEN_CHUNG_BAN_CHAN', 'Theo dõi biến chứng bàn chân']),
+          'Biết xử lý hạ đường huyết': getVal(row, ['XU_LY_HA_DUONG_HUYET', 'Biết xử lý hạ đường huyết']),
         });
       }
     });
@@ -531,34 +518,89 @@ function MainApp() {
   const parseDate = (dateStr: any) => {
     if (dateStr === undefined || dateStr === null || dateStr === '') return null;
     if (typeof dateStr === 'number') {
-      return new Date(Math.round((dateStr - 25569) * 86400 * 1000));
+      // Excel serial date
+      if (dateStr > 10000 && dateStr < 100000) {
+        return new Date(Math.round((dateStr - 25569) * 86400 * 1000));
+      }
+      dateStr = String(dateStr);
     }
     const str = String(dateStr).trim();
-    const parts = str.split(/[ /:-]/);
-    if (parts.length >= 3) {
-      const day = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const year = parseInt(parts[2], 10);
-      if (!isNaN(day) && !isNaN(month) && !isNaN(year) && year > 1900) {
-        return new Date(year, month, day);
+    
+    // DD/MM/YYYY or DD-MM-YYYY
+    const dmy = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+    if (dmy) {
+      return new Date(parseInt(dmy[3], 10), parseInt(dmy[2], 10) - 1, parseInt(dmy[1], 10));
+    }
+
+    // YYYY-MM-DD
+    const ymd = str.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+    if (ymd) {
+      return new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10));
+    }
+
+    // YYYYMMDD or DDMMYYYY
+    if (str.length === 8 && /^\d{8}$/.test(str)) {
+      const y1 = parseInt(str.substring(0, 4), 10);
+      const m1 = parseInt(str.substring(4, 6), 10) - 1;
+      const d1 = parseInt(str.substring(6, 8), 10);
+      if (y1 > 1900 && y1 < 2100 && m1 >= 0 && m1 < 12 && d1 > 0 && d1 <= 31) {
+        return new Date(y1, m1, d1);
+      }
+      const d2 = parseInt(str.substring(0, 2), 10);
+      const m2 = parseInt(str.substring(2, 4), 10) - 1;
+      const y2 = parseInt(str.substring(4, 8), 10);
+      if (y2 > 1900 && y2 < 2100 && m2 >= 0 && m2 < 12 && d2 > 0 && d2 <= 31) {
+        return new Date(y2, m2, d2);
       }
     }
+
     const d = new Date(str);
     return isNaN(d.getTime()) ? null : d;
   };
 
   const getFilteredData = (data: any[]) => {
-    if (!startDate || !endDate || !hasPremiumAccess) return data;
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
+    let filtered = data;
+    
+    if (startDate && endDate && hasPremiumAccess) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
 
-    return data.filter(row => {
-      const rowDate = parseDate(row['Ngày khám (*)']);
-      if (!rowDate) return false;
-      return rowDate >= start && rowDate <= end;
-    });
+      filtered = filtered.filter(row => {
+        const rowDate = parseDate(row['Ngày khám (*)']);
+        if (!rowDate) return false;
+        return rowDate >= start && rowDate <= end;
+      });
+    }
+
+    if (removeDuplicates && hasPremiumAccess) {
+      const uniqueMap = new Map<string, any>();
+      
+      filtered.forEach(row => {
+        const bhyt = String(row['Mã BHYT (*)'] || '').trim();
+        if (!bhyt) return;
+        
+        // Lấy 10 số cuối
+        const key = bhyt.length >= 10 ? bhyt.slice(-10) : bhyt;
+        const currentDate = parseDate(row['Ngày khám (*)']);
+        
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, row);
+        } else {
+          const existingRow = uniqueMap.get(key);
+          const existingDate = parseDate(existingRow['Ngày khám (*)']);
+          
+          if (currentDate && existingDate && currentDate > existingDate) {
+            uniqueMap.set(key, row);
+          }
+        }
+      });
+      
+      filtered = Array.from(uniqueMap.values());
+    }
+
+    return filtered;
   };
 
   const filteredTHA = getFilteredData(outputDataTHA);
@@ -866,7 +908,7 @@ function MainApp() {
                                 className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-3 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer group-hover:bg-white" 
                                 value={startDate} 
                                 onChange={e => setStartDate(e.target.value)} 
-                                disabled={!hasPremiumAccess}
+                                disabled={filterDateRangePremium && !hasPremiumAccess}
                               />
                               <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-hover:text-blue-400 transition-colors" size={16} />
                             </div>
@@ -882,40 +924,12 @@ function MainApp() {
                                 className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-3 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer group-hover:bg-white" 
                                 value={endDate} 
                                 onChange={e => setEndDate(e.target.value)} 
-                                disabled={!hasPremiumAccess}
+                                disabled={filterDateRangePremium && !hasPremiumAccess}
                               />
                               <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-hover:text-blue-400 transition-colors" size={16} />
                             </div>
                           </div>
                         </div>
-                        {hasPremiumAccess && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {[
-                              { label: 'Hôm nay', days: 0 },
-                              { label: '7 ngày qua', days: 7 },
-                              { label: '30 ngày qua', days: 30 },
-                              { label: 'Tháng này', type: 'month' }
-                            ].map((opt, i) => (
-                              <button 
-                                key={i}
-                                onClick={() => {
-                                  const end = new Date();
-                                  const start = new Date();
-                                  if (opt.type === 'month') {
-                                    start.setDate(1);
-                                  } else {
-                                    start.setDate(end.getDate() - (opt.days || 0));
-                                  }
-                                  setStartDate(start.toISOString().split('T')[0]);
-                                  setEndDate(end.toISOString().split('T')[0]);
-                                }}
-                                className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-[10px] font-bold text-slate-500 rounded-lg transition-all border border-transparent hover:border-blue-100"
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
                       </div>
 
                       {/* Gender & Admin Unit */}
@@ -928,19 +942,39 @@ function MainApp() {
                           <div className="flex p-1 bg-slate-100 rounded-xl">
                             <button 
                               onClick={() => handleGenderFormatChange('text')}
-                              disabled={!hasPremiumAccess}
-                              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${genderFormat === 'text' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                              disabled={filterGenderFormatPremium && !hasPremiumAccess}
+                              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${genderFormat === 'text' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'} ${filterGenderFormatPremium && !hasPremiumAccess ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                               Nam / Nữ
                             </button>
                             <button 
                               onClick={() => handleGenderFormatChange('number')}
-                              disabled={!hasPremiumAccess}
-                              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${genderFormat === 'number' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                              disabled={filterGenderFormatPremium && !hasPremiumAccess}
+                              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${genderFormat === 'number' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'} ${filterGenderFormatPremium && !hasPremiumAccess ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                               01 / 02
                             </button>
                           </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <ShieldCheck size={14} />
+                            Tùy chọn nâng cao
+                          </label>
+                          <button 
+                            onClick={() => setRemoveDuplicates(!removeDuplicates)}
+                            disabled={filterDuplicatePremium && !hasPremiumAccess}
+                            className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${removeDuplicates ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'} ${filterDuplicatePremium && !hasPremiumAccess ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${removeDuplicates ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300'}`}>
+                                {removeDuplicates && <Check size={10} strokeWidth={4} />}
+                              </div>
+                              <span className="text-xs font-bold">Lọc trùng (10 số cuối BHYT)</span>
+                            </div>
+                            <Info size={14} className="opacity-40" />
+                          </button>
                         </div>
                       </div>
 
@@ -958,18 +992,21 @@ function MainApp() {
                               onChange={(e) => setAdminUnitCode(e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && handleApplyAdminUnit()}
                               placeholder="Nhập mã xã/phường..."
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
+                              disabled={filterAdminUnitPremium && !hasPremiumAccess}
+                              className={`w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all ${filterAdminUnitPremium && !hasPremiumAccess ? 'opacity-50 cursor-not-allowed' : ''}`}
                             />
                             <button 
                               onClick={() => setShowAdminUnit(true)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-blue-600 transition-colors"
+                              disabled={filterAdminUnitPremium && !hasPremiumAccess}
+                              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-blue-600 transition-colors ${filterAdminUnitPremium && !hasPremiumAccess ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                               <ChevronRight size={18} />
                             </button>
                           </div>
                           <button 
                             onClick={() => handleApplyAdminUnit()}
-                            className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all active:scale-95"
+                            disabled={filterAdminUnitPremium && !hasPremiumAccess}
+                            className={`px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all active:scale-95 ${filterAdminUnitPremium && !hasPremiumAccess ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             Xác nhận
                           </button>
@@ -1094,8 +1131,8 @@ function MainApp() {
                   <div className="relative">
                     {currentData.length > 0 ? (
                       <>
-                        <div className="overflow-x-auto max-h-[500px] no-scrollbar">
-                          <table className="w-full text-left border-collapse">
+                        <div className="overflow-x-auto max-h-[500px]">
+                          <table className="min-w-[1200px] text-left border-collapse">
                             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                               <tr>
                                 {currentColumns.map((col, idx) => (
