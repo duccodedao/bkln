@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc, orderBy } from 'firebase/firestore';
 import { UserProfile, useAuth } from '../context/AuthContext';
@@ -40,14 +40,17 @@ import {
 } from 'recharts';
 
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
-  const { isGlobalPremium } = useAuth();
+  const { 
+    isGlobalPremium, 
+    filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium 
+  } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'payments' | 'settings' | 'logs'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'payments' | 'settings'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [broadcastMessage, setBroadcastMessage] = useState('');
-  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
+  const [premiumPrice, setPremiumPrice] = useState('99.000');
+  const [isUpdatingPrice, setIsUpdatingPrice] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean;
     title: string;
@@ -62,16 +65,31 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     type: 'info'
   });
 
-  // Mock data for chart
-  const chartData = [
-    { name: 'T2', users: 12, revenue: 400 },
-    { name: 'T3', users: 19, revenue: 300 },
-    { name: 'T4', users: 15, revenue: 500 },
-    { name: 'T5', users: 22, revenue: 800 },
-    { name: 'T6', users: 30, revenue: 600 },
-    { name: 'T7', users: 25, revenue: 900 },
-    { name: 'CN', users: 35, revenue: 1200 },
-  ];
+  // Calculate real chart data for the last 7 days
+  const chartData = useMemo(() => {
+    const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const now = new Date();
+    const last7Days = [];
+    const price = parseInt(premiumPrice.replace(/\./g, ''), 10) || 99000;
+    
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const dayStart = d.getTime();
+      const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+      
+      const dayUsers = users.filter(u => u.createdAt >= dayStart && u.createdAt < dayEnd).length;
+      const dayRevenue = payments.filter(p => p.status === 'approved' && p.createdAt >= dayStart && p.createdAt < dayEnd).length;
+      
+      last7Days.push({
+        name: days[d.getDay()],
+        users: dayUsers,
+        revenue: dayRevenue * price
+      });
+    }
+    return last7Days;
+  }, [users, payments, premiumPrice]);
 
   useEffect(() => {
     const qUsers = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
@@ -180,32 +198,42 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     document.body.removeChild(link);
   };
 
-  const sendBroadcast = () => {
-    if (!broadcastMessage.trim()) return;
-    setConfirmModal({
-      show: true,
-      title: 'Gửi thông báo hệ thống',
-      message: 'Thông báo này sẽ được gửi đến tất cả người dùng. Bạn có chắc chắn muốn tiếp tục?',
-      type: 'info',
-      onConfirm: () => {
-        setIsSendingBroadcast(true);
-        setConfirmModal(prev => ({ ...prev, show: false }));
-        setTimeout(() => {
-          setIsSendingBroadcast(false);
-          setBroadcastMessage('');
-          alert('Đã gửi thông báo đến toàn bộ người dùng!');
-        }, 1500);
-      }
-    });
+  const updatePremiumPrice = async () => {
+    setIsUpdatingPrice(true);
+    try {
+      await updateDoc(doc(db, 'settings', 'global'), { premiumPrice });
+      alert('Đã cập nhật giá gói Premium!');
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsUpdatingPrice(false);
+    }
   };
 
-  const stats = {
-    totalUsers: users.length,
-    premiumUsers: users.filter(u => u.isPremium).length,
-    pendingPayments: payments.filter(p => p.status === 'pending').length,
-    totalRevenue: payments.filter(p => p.status === 'approved').length * 99000,
-    activeToday: Math.floor(users.length * 0.4) // Mock stat
-  };
+  useEffect(() => {
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'global'), (doc) => {
+      if (doc.exists()) {
+        setPremiumPrice(doc.data().premiumPrice || '99.000');
+      }
+    });
+    return () => unsubSettings();
+  }, []);
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const todayStart = now.getTime();
+    
+    const price = parseInt(premiumPrice.replace(/\./g, ''), 10) || 99000;
+    
+    return {
+      totalUsers: users.length,
+      premiumUsers: users.filter(u => u.isPremium).length,
+      pendingPayments: payments.filter(p => p.status === 'pending').length,
+      totalRevenue: payments.filter(p => p.status === 'approved').length * price,
+      activeToday: users.filter(u => u.createdAt >= todayStart).length
+    };
+  }, [users, payments, premiumPrice]);
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
@@ -260,13 +288,6 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               {stats.pendingPayments > 0 && (
                 <span className="ml-auto px-2 py-0.5 bg-amber-100 text-amber-600 rounded-md text-[10px] animate-pulse">{stats.pendingPayments}</span>
               )}
-            </button>
-            <button 
-              onClick={() => setActiveTab('logs')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'logs' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
-            >
-              <Terminal size={18} />
-              Nhật ký hệ thống
             </button>
             <button 
               onClick={() => setActiveTab('settings')}
@@ -367,13 +388,18 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                           tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} 
                           dy={10}
                         />
-                        <YAxis hide />
+                        <YAxis yAxisId="left" hide />
+                        <YAxis yAxisId="right" orientation="right" hide />
                         <Tooltip 
                           contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                           itemStyle={{ fontSize: '12px', fontWeight: 700 }}
+                          formatter={(value: number, name: string) => {
+                            if (name === 'revenue') return [new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value), 'Doanh thu'];
+                            return [value, 'Người dùng'];
+                          }}
                         />
-                        <Area type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
-                        <Area type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={3} fill="transparent" />
+                        <Area yAxisId="left" type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
+                        <Area yAxisId="right" type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={3} fill="transparent" />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -525,15 +551,9 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <button 
-                                  onClick={() => toggleBlock(u.uid, u.isBlocked)}
-                                  className={`p-2 rounded-xl transition-all ${
-                                    u.isBlocked ? 'text-green-600 hover:bg-green-50' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'
-                                  }`}
-                                  title={u.isBlocked ? 'Mở khóa' : 'Cấm'}
+                                  className="p-2 text-slate-200 cursor-not-allowed rounded-xl transition-all"
+                                  disabled
                                 >
-                                  {u.isBlocked ? <CheckCircle size={18} /> : <XCircle size={18} />}
-                                </button>
-                                <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
                                   <MoreVertical size={18} />
                                 </button>
                               </div>
@@ -590,26 +610,11 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                               </span>
                             </td>
                             <td className="px-6 py-4 text-right">
-                              {p.status === 'pending' ? (
-                                <div className="flex items-center justify-end gap-2">
-                                  <button 
-                                    onClick={() => approvePayment(p.id, p.uid)}
-                                    className="px-4 py-2 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-green-700 transition-all shadow-lg shadow-green-100 active:scale-95"
-                                  >
-                                    Duyệt
-                                  </button>
-                                  <button 
-                                    onClick={() => rejectPayment(p.id)}
-                                    className="px-4 py-2 bg-white border border-red-100 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-red-50 transition-all active:scale-95"
-                                  >
-                                    Từ chối
-                                  </button>
-                                </div>
-                              ) : (
-                                <button className="p-2 text-slate-300 hover:text-slate-500 transition-colors">
+                              <div className="flex items-center justify-end gap-2">
+                                <button className="p-2 text-slate-200 cursor-not-allowed transition-colors" disabled>
                                   <ExternalLink size={18} />
                                 </button>
-                              )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -620,75 +625,10 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {activeTab === 'logs' && (
-              <div className="space-y-6">
-                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                  <div className="flex items-center justify-between mb-6">
-                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                      <Terminal size={18} className="text-slate-600" />
-                      Nhật ký hoạt động hệ thống
-                    </h4>
-                    <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
-                      <RefreshCcw size={16} />
-                    </button>
-                  </div>
-                  <div className="space-y-4">
-                    {[
-                      { action: 'User Login', user: 'sonlyhongduc@gmail.com', time: '2 phút trước', status: 'success' },
-                      { action: 'Payment Approved', user: 'admin@bmass.com', time: '15 phút trước', status: 'success' },
-                      { action: 'Settings Updated', user: 'admin@bmass.com', time: '1 giờ trước', status: 'warning' },
-                      { action: 'User Blocked', user: 'test@user.com', time: '3 giờ trước', status: 'danger' },
-                      { action: 'Global Premium Enabled', user: 'admin@bmass.com', time: '5 giờ trước', status: 'info' },
-                    ].map((log, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${
-                            log.status === 'success' ? 'bg-green-500' : 
-                            log.status === 'warning' ? 'bg-amber-500' : 
-                            log.status === 'danger' ? 'bg-red-500' : 'bg-blue-500'
-                          }`}></div>
-                          <div>
-                            <p className="text-xs font-bold text-slate-700">{log.action}</p>
-                            <p className="text-[10px] text-slate-400">{log.user}</p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-medium text-slate-400">{log.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
             {activeTab === 'settings' && (
               <div className="space-y-6">
                 <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-8">
-                  <div className="space-y-4">
-                    <h4 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                      <Bell size={20} className="text-blue-600" />
-                      Gửi thông báo hệ thống
-                    </h4>
-                    <p className="text-sm text-slate-500">Gửi tin nhắn thông báo đến tất cả người dùng đang hoạt động.</p>
-                    <div className="flex gap-3">
-                      <input 
-                        type="text" 
-                        placeholder="Nhập nội dung thông báo..." 
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                        value={broadcastMessage}
-                        onChange={e => setBroadcastMessage(e.target.value)}
-                      />
-                      <button 
-                        onClick={sendBroadcast}
-                        disabled={isSendingBroadcast || !broadcastMessage.trim()}
-                        className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {isSendingBroadcast ? <RefreshCcw size={18} className="animate-spin" /> : <Bell size={18} />}
-                        Gửi ngay
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-slate-100 pt-8">
+                  <div className="border-t border-slate-100 pt-8 space-y-6">
                     <div className="flex items-start justify-between gap-6">
                       <div className="space-y-2">
                         <h4 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -696,7 +636,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                           Chế độ Global Premium
                         </h4>
                         <p className="text-sm text-slate-500 leading-relaxed max-w-md">
-                          Bật tùy chọn này sẽ tự động mở khóa tính năng nâng cao cho <span className="font-bold text-slate-900">TẤT CẢ</span> người dùng trong hệ thống mà không cần thanh toán.
+                          Bật tùy chọn này sẽ tự động mở khóa <span className="font-bold text-slate-900">TẤT CẢ</span> tính năng nâng cao cho mọi người dùng.
                         </p>
                       </div>
                       <button 
@@ -705,6 +645,27 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                       >
                         <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-300 ${isGlobalPremium ? 'translate-x-7' : 'translate-x-1'}`} />
                       </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {[
+                        { id: 'filterDateRangePremium', label: 'Lọc theo ngày (Premium)', current: filterDateRangePremium },
+                        { id: 'filterGenderFormatPremium', label: 'Định dạng giới tính (Premium)', current: filterGenderFormatPremium },
+                        { id: 'filterAdminUnitPremium', label: 'Đơn vị hành chính (Premium)', current: filterAdminUnitPremium },
+                        { id: 'filterDuplicatePremium', label: 'Lọc trùng BHYT (Premium)', current: filterDuplicatePremium }
+                      ].map((filter) => (
+                        <div key={filter.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                          <span className="text-xs font-bold text-slate-700">{filter.label}</span>
+                          <button 
+                            onClick={async () => {
+                              await updateDoc(doc(db, 'settings', 'global'), { [filter.id]: !filter.current });
+                            }}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 ${filter.current ? 'bg-blue-600' : 'bg-slate-200'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${filter.current ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -719,27 +680,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                      <Shield size={18} className="text-indigo-600" />
-                      Bảo mật hệ thống
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                        <span className="text-xs font-bold text-slate-600">Giới hạn IP đăng nhập</span>
-                        <div className="w-10 h-5 bg-slate-200 rounded-full relative">
-                          <div className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full"></div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                        <span className="text-xs font-bold text-slate-600">Xác thực 2 yếu tố (Admin)</span>
-                        <div className="w-10 h-5 bg-blue-600 rounded-full relative">
-                          <div className="absolute right-1 top-1 w-3 h-3 bg-white rounded-full"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <div className="grid grid-cols-1 gap-6">
                   <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
                     <h4 className="font-bold text-slate-800 flex items-center gap-2">
                       <TrendingUp size={18} className="text-green-600" />
@@ -748,7 +689,22 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
                         <span className="text-xs font-bold text-slate-600">Giá gói Premium</span>
-                        <span className="text-xs font-black text-slate-900">99.000đ</span>
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="text" 
+                            className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-black text-slate-900 outline-none focus:ring-1 focus:ring-blue-500"
+                            value={premiumPrice}
+                            onChange={e => setPremiumPrice(e.target.value)}
+                          />
+                          <span className="text-xs font-black text-slate-900">đ</span>
+                          <button 
+                            onClick={updatePremiumPrice}
+                            disabled={isUpdatingPrice}
+                            className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50"
+                          >
+                            {isUpdatingPrice ? <RefreshCcw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                          </button>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
                         <span className="text-xs font-bold text-slate-600">Thời hạn sử dụng</span>
