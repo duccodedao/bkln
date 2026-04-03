@@ -558,7 +558,11 @@ function MainApp() {
     return isNaN(d.getTime()) ? null : d;
   };
 
+<<<<<<< HEAD
   const getBaseFilteredData = (data: any[]) => {
+=======
+  const getFilteredData = (data: any[]) => {
+>>>>>>> ac5cca372765f03a226b10c4c29c2e2a33969c25
     let filtered = data;
     
     if (startDate && endDate && hasPremiumAccess) {
@@ -574,6 +578,35 @@ function MainApp() {
       });
     }
 
+<<<<<<< HEAD
+=======
+    if (removeDuplicates && hasPremiumAccess) {
+      const uniqueMap = new Map<string, any>();
+      
+      filtered.forEach(row => {
+        const bhyt = String(row['Mã BHYT (*)'] || '').trim();
+        if (!bhyt) return;
+        
+        // Lấy 10 số cuối
+        const key = bhyt.length >= 10 ? bhyt.slice(-10) : bhyt;
+        const currentDate = parseDate(row['Ngày khám (*)']);
+        
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, row);
+        } else {
+          const existingRow = uniqueMap.get(key);
+          const existingDate = parseDate(existingRow['Ngày khám (*)']);
+          
+          if (currentDate && existingDate && currentDate > existingDate) {
+            uniqueMap.set(key, row);
+          }
+        }
+      });
+      
+      filtered = Array.from(uniqueMap.values());
+    }
+
+>>>>>>> ac5cca372765f03a226b10c4c29c2e2a33969c25
     return filtered;
   };
 
