@@ -70,10 +70,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const now = new Date();
     const last7Days = [];
-<<<<<<< HEAD
     const price = parseInt(premiumPrice.replace(/\./g, ''), 10) || 99000;
-=======
->>>>>>> ac5cca372765f03a226b10c4c29c2e2a33969c25
     
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
@@ -88,19 +85,11 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
       last7Days.push({
         name: days[d.getDay()],
         users: dayUsers,
-<<<<<<< HEAD
         revenue: dayRevenue * price
       });
     }
     return last7Days;
   }, [users, payments, premiumPrice]);
-=======
-        revenue: dayRevenue * 100 // Scaled for visualization, representing roughly 100k per payment
-      });
-    }
-    return last7Days;
-  }, [users, payments]);
->>>>>>> ac5cca372765f03a226b10c4c29c2e2a33969c25
 
   useEffect(() => {
     const qUsers = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
