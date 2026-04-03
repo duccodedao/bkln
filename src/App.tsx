@@ -167,7 +167,7 @@ function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) 
 function MainApp() {
   const { 
     user, profile, isGlobalPremium, 
-    filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium,
+    filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium, filterRowLimitPremium,
     logout, needsProfileSetup, setupProfile, loading: authLoading 
   } = useAuth();
   const [showAdmin, setShowAdmin] = useState(false);
@@ -384,6 +384,13 @@ function MainApp() {
         if (jsonData.length === 0) {
           setError('File không có dữ liệu.');
           setIsProcessing(false);
+          return;
+        }
+
+        if (filterRowLimitPremium && !hasPremiumAccess && jsonData.length > 1000) {
+          setError(`Tài khoản miễn phí chỉ được xử lý tối đa 1000 dòng (File của bạn có ${jsonData.length} dòng). Vui lòng nâng cấp Premium để xử lý file lớn hơn.`);
+          setIsProcessing(false);
+          setShowUpgrade(true);
           return;
         }
 

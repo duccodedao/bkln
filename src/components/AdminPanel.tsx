@@ -42,7 +42,7 @@ import {
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const { 
     isGlobalPremium, 
-    filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium 
+    filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium, filterRowLimitPremium 
   } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
@@ -551,8 +551,11 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <button 
-                                  className="p-2 text-slate-200 cursor-not-allowed rounded-xl transition-all"
-                                  disabled
+                                  onClick={() => toggleBlock(u.uid, u.isBlocked)}
+                                  className={`p-2 rounded-xl transition-all ${
+                                    u.isBlocked ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'
+                                  }`}
+                                  title={u.isBlocked ? 'Mở khóa' : 'Khóa tài khoản'}
                                 >
                                   <MoreVertical size={18} />
                                 </button>
@@ -611,7 +614,25 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                             </td>
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                <button className="p-2 text-slate-200 cursor-not-allowed transition-colors" disabled>
+                                {p.status === 'pending' && (
+                                  <>
+                                    <button 
+                                      onClick={() => approvePayment(p.id, p.uid)}
+                                      className="p-2 text-green-600 hover:bg-green-50 rounded-xl transition-all"
+                                      title="Phê duyệt"
+                                    >
+                                      <CheckCircle size={18} />
+                                    </button>
+                                    <button 
+                                      onClick={() => rejectPayment(p.id)}
+                                      className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                      title="Từ chối"
+                                    >
+                                      <XCircle size={18} />
+                                    </button>
+                                  </>
+                                )}
+                                <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
                                   <ExternalLink size={18} />
                                 </button>
                               </div>
@@ -652,7 +673,8 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                         { id: 'filterDateRangePremium', label: 'Lọc theo ngày (Premium)', current: filterDateRangePremium },
                         { id: 'filterGenderFormatPremium', label: 'Định dạng giới tính (Premium)', current: filterGenderFormatPremium },
                         { id: 'filterAdminUnitPremium', label: 'Đơn vị hành chính (Premium)', current: filterAdminUnitPremium },
-                        { id: 'filterDuplicatePremium', label: 'Lọc trùng BHYT (Premium)', current: filterDuplicatePremium }
+                        { id: 'filterDuplicatePremium', label: 'Lọc trùng BHYT (Premium)', current: filterDuplicatePremium },
+                        { id: 'filterRowLimitPremium', label: 'Giới hạn 1000 dòng (Premium)', current: filterRowLimitPremium }
                       ].map((filter) => (
                         <div key={filter.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                           <span className="text-xs font-bold text-slate-700">{filter.label}</span>

@@ -37,6 +37,7 @@ interface AuthContextType {
   filterGenderFormatPremium: boolean;
   filterAdminUnitPremium: boolean;
   filterDuplicatePremium: boolean;
+  filterRowLimitPremium: boolean;
   loading: boolean;
   needsProfileSetup: boolean;
   loginWithGoogle: () => Promise<void>;
@@ -63,6 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [filterGenderFormatPremium, setFilterGenderFormatPremium] = useState(true);
   const [filterAdminUnitPremium, setFilterAdminUnitPremium] = useState(true);
   const [filterDuplicatePremium, setFilterDuplicatePremium] = useState(true);
+  const [filterRowLimitPremium, setFilterRowLimitPremium] = useState(true);
   const [loading, setLoading] = useState(true);
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
 
@@ -101,13 +103,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFilterGenderFormatPremium(data.filterGenderFormatPremium ?? true);
         setFilterAdminUnitPremium(data.filterAdminUnitPremium ?? true);
         setFilterDuplicatePremium(data.filterDuplicatePremium ?? true);
+        setFilterRowLimitPremium(data.filterRowLimitPremium ?? true);
       } else {
         setDoc(globalRef, { 
           isGlobalPremium: false,
           filterDateRangePremium: true,
           filterGenderFormatPremium: true,
           filterAdminUnitPremium: true,
-          filterDuplicatePremium: true
+          filterDuplicatePremium: true,
+          filterRowLimitPremium: true
         }).catch(console.error);
       }
     }, (error) => {
@@ -179,7 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider value={{ 
       user, profile, isGlobalPremium, 
-      filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium,
+      filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium, filterRowLimitPremium,
       loading, needsProfileSetup, 
       loginWithGoogle, loginWithEmail, registerWithEmail, loginWithPhone,
       logout, setupProfile 
