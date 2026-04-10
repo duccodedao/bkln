@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileOutput, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw, ShieldCheck, Check } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileOutput, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw, ShieldCheck, Check, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AdminPanel from './components/AdminPanel';
@@ -40,6 +40,8 @@ const COPD_COLUMNS = [
   'Hen-C1', 'Hen-C2', 'Hen-C3', 'Hen-C4', 'Hen-C5', 'Hen-C6', 'Hen-C7', 'Nghi ngờ Hen',
   'COPD-C1', 'COPD-C2', 'COPD-C3', 'COPD-C4', 'COPD-C5', 'Nghi ngờ COPD'
 ];
+
+import OnlineScreeningForm from './components/OnlineScreeningForm';
 
 function AdministrativeUnitModal({ onSelect, onClose }: { onSelect: (code: string) => void, onClose: () => void }) {
   const [manualCode, setManualCode] = useState('');
@@ -237,6 +239,7 @@ function MainApp() {
     logout, needsProfileSetup, setupProfile, loading: authLoading 
   } = useAuth();
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   const [showAdminUnit, setShowAdminUnit] = useState(false);
   const [showDownloadOptions, setShowDownloadOptions] = useState(false);
 
@@ -263,6 +266,7 @@ function MainApp() {
   const [randomFamilyHistory, setRandomFamilyHistory] = useState(false);
   const [randomHeightWeight, setRandomHeightWeight] = useState(false);
   const [randomCOPD, setRandomCOPD] = useState(false);
+  const [randomBP, setRandomBP] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -340,6 +344,41 @@ function MainApp() {
       const hasTHA = diagnosis.includes('I10') || diagnosis.includes('I11') || diagnosis.includes('I12') || diagnosis.includes('I13') || diagnosis.includes('I15');
       const hasDTD = diagnosis.includes('E10') || diagnosis.includes('E11') || diagnosis.includes('E12') || diagnosis.includes('E13') || diagnosis.includes('E14');
 
+      // Advanced Config Logic
+      let weightRaw = getVal(row, ['CAN_NANG', 'Cân nặng', 'Weight']);
+      let heightRaw = getVal(row, ['CHIEU_CAO', 'Chiều cao', 'Height']);
+      let weight = parseFloat(weightRaw);
+      let height = parseFloat(heightRaw);
+
+      const isMissingWeight = isNaN(weight) || weight <= 0 || String(weightRaw).toLowerCase().includes('không');
+      const isMissingHeight = isNaN(height) || height <= 0 || String(heightRaw).toLowerCase().includes('không');
+
+      if (randomHeightWeight && isAdmin) {
+        if (isMissingWeight) weight = Math.floor(Math.random() * (75 - 50 + 1)) + 50;
+        if (isMissingHeight) height = Math.floor(Math.random() * (170 - 158 + 1)) + 158;
+      }
+
+      let familyHistory = getVal(row, ['TIEN_SU_GIA_DINH', 'Gia đình mắc ĐTD']);
+      const isMissingFamily = !familyHistory || familyHistory.toLowerCase().includes('không') || familyHistory.toLowerCase().includes('trống');
+      if (randomFamilyHistory && isAdmin && isMissingFamily) {
+        familyHistory = Math.random() > 0.8 ? 'Có' : 'Không';
+      } else if (!familyHistory) {
+        familyHistory = 'Không';
+      }
+
+      let sbpRaw = getVal(row, ['HUYET_AP_CAO', 'HA_TAM_THU', 'Huyết áp cao', 'HA tâm thu']);
+      let dbpRaw = getVal(row, ['HUYET_AP_THAP', 'HA_TAM_TRUONG', 'Huyết áp thấp', 'HA tâm trương']);
+      let sbp = parseFloat(sbpRaw);
+      let dbp = parseFloat(dbpRaw);
+
+      const isMissingBP = (isNaN(sbp) || sbp <= 0 || String(sbpRaw).toLowerCase().includes('không')) && 
+                          (isNaN(dbp) || dbp <= 0 || String(dbpRaw).toLowerCase().includes('không'));
+
+      if (randomBP && isAdmin && isMissingBP) {
+        sbp = 120;
+        dbp = 80;
+      }
+
       const commonFields = {
         'Họ tên (*)': getVal(row, ['TEN_BENH_NHAN', 'HO_TEN', 'Họ tên', 'Tên bệnh nhân']),
         'Giới tính (*)': gender,
@@ -353,10 +392,10 @@ function MainApp() {
         'Nơi phát hiện': getVal(row, ['NOI_PHAT_HIEN', 'Nơi phát hiện']),
         'Ngày khám (*)': getVal(row, ['NGAYRA', 'NGAY_KHAM', 'Ngày khám', 'Ngày ra']),
         'Phân loại BN (*)': '',
-        'HA tâm thu (*)': getVal(row, ['HUYET_AP_CAO', 'HA_TAM_THU', 'Huyết áp cao', 'HA tâm thu']),
-        'HA tâm trương (*)': getVal(row, ['HUYET_AP_THAP', 'HA_TAM_TRUONG', 'Huyết áp thấp', 'HA tâm trương']),
-        'Cân nặng': getVal(row, ['CAN_NANG', 'Cân nặng', 'Weight']),
-        'Chiều cao': getVal(row, ['CHIEU_CAO', 'Chiều cao', 'Height']),
+        'HA tâm thu (*)': sbp || '',
+        'HA tâm trương (*)': dbp || '',
+        'Cân nặng': weight || '',
+        'Chiều cao': height || '',
         'Vòng eo': getVal(row, ['VONG_EO', 'Vòng eo']),
         'Hút thuốc lá': getVal(row, ['HUT_THUOC', 'Hút thuốc lá']),
         'Mức độ uống rượu bia': getVal(row, ['RUOU_BIA', 'Mức độ uống rượu bia']),
@@ -390,28 +429,13 @@ function MainApp() {
       }
 
       // Screening Logic
-      let weight = parseFloat(commonFields['Cân nặng']);
-      let height = parseFloat(commonFields['Chiều cao']);
-      
-      if (randomHeightWeight && isAdmin) {
-        if (isNaN(weight)) weight = Math.floor(Math.random() * (90 - 45 + 1)) + 45;
-        if (isNaN(height)) height = Math.floor(Math.random() * (185 - 150 + 1)) + 150;
-      }
-
       let bmi = 0;
       if (weight > 0 && height > 0) {
         const hMeter = height / 100;
         bmi = weight / (hMeter * hMeter);
       }
 
-      let familyHistory = getVal(row, ['TIEN_SU_GIA_DINH', 'Gia đình mắc ĐTD']) || 'Không';
-      if (randomFamilyHistory && isAdmin && familyHistory === 'Không') {
-        familyHistory = Math.random() > 0.8 ? 'Có' : 'Không';
-      }
-
       const waist = parseFloat(commonFields['Vòng eo']);
-      const sbp = parseFloat(commonFields['HA tâm thu (*)']);
-      const dbp = parseFloat(commonFields['HA tâm trương (*)']);
 
       // Points calculation
       let pGender = isMale ? 2 : 0;
@@ -591,6 +615,16 @@ function MainApp() {
     setError('Đã áp dụng bộ lọc thành công.');
     setTimeout(() => setError(''), 3000);
   };
+
+  useEffect(() => {
+    if (inputData.length > 0) {
+      const { thaData, dtdData, screeningData, copdData } = transformData(inputData, genderFormat, adminUnitCode);
+      setOutputDataTHA(thaData);
+      setOutputDataDTD(dtdData);
+      setOutputDataScreening(screeningData);
+      setOutputDataCOPD(copdData);
+    }
+  }, [genderFormat, adminUnitCode, randomFamilyHistory, randomHeightWeight, randomCOPD, randomBP]);
 
   const handleClearFilters = () => {
     setStartDate('');
@@ -1171,7 +1205,75 @@ function MainApp() {
   }
 
   if (!user) {
-    return <Login />;
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900">
+        {/* Top Header for Guest */}
+        <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 p-4">
+          <div className="max-w-7xl mx-auto flex items-center gap-6">
+            <button 
+              onClick={() => setShowLogin(true)}
+              className="px-6 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all flex items-center gap-2"
+            >
+              <LogIn size={18} />
+              Đăng nhập
+            </button>
+            <div className="flex items-center gap-3">
+              <img src="https://hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-8 w-auto" />
+              <span className="font-black text-slate-900 tracking-tight hidden sm:inline">BMASS HEALTH</span>
+            </div>
+          </div>
+        </header>
+
+        <main className="pt-24 pb-12 px-4">
+          <div className="max-w-4xl mx-auto text-center mb-12">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight mb-4">
+                Sàng lọc sức khỏe <span className="text-blue-600">chủ động</span>
+              </h1>
+              <p className="text-lg text-slate-500 font-medium max-w-2xl mx-auto">
+                Thực hiện đánh giá nguy cơ mắc các bệnh không lây nhiễm (Tiểu đường, Huyết áp, COPD, Hen) hoàn toàn trực tuyến và nhận kết quả ngay lập tức.
+              </p>
+            </motion.div>
+          </div>
+
+          <OnlineScreeningForm />
+        </main>
+
+        {/* Login Modal */}
+        <AnimatePresence>
+          {showLogin && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowLogin(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-md"
+              >
+                <div className="absolute -top-12 right-0">
+                  <button 
+                    onClick={() => setShowLogin(false)}
+                    className="p-2 text-white/60 hover:text-white transition-colors"
+                  >
+                    Đóng [x]
+                  </button>
+                </div>
+                <Login />
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
   }
 
   if (needsProfileSetup) {
@@ -1568,11 +1670,11 @@ function MainApp() {
                           Cấu hình nâng cao
                         </label>
                         {isAdmin ? (
-                          <div className="space-y-3">
+                          <div className="flex flex-wrap gap-3">
                             {!showBsConfig ? (
                               <button 
                                 onClick={() => setShowBsConfig(true)} 
-                                className="w-full py-2.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all"
+                                className="px-4 py-2.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all"
                               >
                                 Tự động điền kết quả (Đường huyết)
                               </button>
@@ -1581,7 +1683,7 @@ function MainApp() {
                                 <input 
                                   type="number" 
                                   placeholder="Min" 
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                  className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none" 
                                   value={bsMin} 
                                   onChange={e => setBsMin(e.target.value)} 
                                 />
@@ -1589,7 +1691,7 @@ function MainApp() {
                                 <input 
                                   type="number" 
                                   placeholder="Max" 
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                  className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none" 
                                   value={bsMax} 
                                   onChange={e => setBsMax(e.target.value)} 
                                 />
@@ -1604,7 +1706,7 @@ function MainApp() {
                             
                             <button 
                               onClick={() => setRandomFamilyHistory(!randomFamilyHistory)}
-                              className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
+                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
                                 randomFamilyHistory ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
                               }`}
                             >
@@ -1614,7 +1716,7 @@ function MainApp() {
 
                             <button 
                               onClick={() => setRandomHeightWeight(!randomHeightWeight)}
-                              className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
+                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
                                 randomHeightWeight ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
                               }`}
                             >
@@ -1623,28 +1725,18 @@ function MainApp() {
                             </button>
 
                             <button 
-                              onClick={() => {
-                                setRandomCOPD(!randomCOPD);
-                                if (!randomCOPD && outputDataCOPD.length > 0) {
-                                  const newData = outputDataCOPD.map(row => {
-                                    const henAnswers = Array.from({ length: 7 }, () => (Math.random() > 0.8 ? 'Có' : 'Không'));
-                                    const copdAnswers = Array.from({ length: 5 }, () => (Math.random() > 0.8 ? 'Có' : 'Không'));
-                                    copdAnswers[3] = 'Có'; // Age >= 50, so GOLD Q4 is always true
-                                    
-                                    const henCount = henAnswers.filter(a => a === 'Có').length;
-                                    const copdCount = copdAnswers.filter(a => a === 'Có').length;
-                                    
-                                    const updatedRow = { ...row };
-                                    henAnswers.forEach((a, i) => updatedRow[`Hen-C${i+1}`] = a);
-                                    copdAnswers.forEach((a, i) => updatedRow[`COPD-C${i+1}`] = a);
-                                    updatedRow['Nghi ngờ Hen'] = henCount >= 2 ? 'Có' : 'Không';
-                                    updatedRow['Nghi ngờ COPD'] = copdCount >= 3 ? 'Có' : 'Không';
-                                    return updatedRow;
-                                  });
-                                  setOutputDataCOPD(newData);
-                                }
-                              }}
-                              className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
+                              onClick={() => setRandomBP(!randomBP)}
+                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
+                                randomBP ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
+                              }`}
+                            >
+                              {randomBP ? <Check size={14} /> : <div className="w-3.5" />}
+                              Huyết áp tự động (120/80)
+                            </button>
+
+                            <button 
+                              onClick={() => setRandomCOPD(!randomCOPD)}
+                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
                                 randomCOPD ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
                               }`}
                             >
