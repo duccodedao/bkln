@@ -32,11 +32,6 @@ export interface UserProfile {
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
-  isGlobalPremium: boolean;
-  filterDateRangePremium: boolean;
-  filterGenderFormatPremium: boolean;
-  filterAdminUnitPremium: boolean;
-  filterDuplicatePremium: boolean;
   loading: boolean;
   needsProfileSetup: boolean;
   loginWithGoogle: () => Promise<void>;
@@ -58,11 +53,6 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isGlobalPremium, setIsGlobalPremium] = useState(false);
-  const [filterDateRangePremium, setFilterDateRangePremium] = useState(true);
-  const [filterGenderFormatPremium, setFilterGenderFormatPremium] = useState(true);
-  const [filterAdminUnitPremium, setFilterAdminUnitPremium] = useState(true);
-  const [filterDuplicatePremium, setFilterDuplicatePremium] = useState(true);
   const [loading, setLoading] = useState(true);
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
 
@@ -92,31 +82,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    const globalRef = doc(db, 'settings', 'global');
-    const unsubGlobal = onSnapshot(globalRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setIsGlobalPremium(data.isGlobalPremium || false);
-        setFilterDateRangePremium(data.filterDateRangePremium ?? true);
-        setFilterGenderFormatPremium(data.filterGenderFormatPremium ?? true);
-        setFilterAdminUnitPremium(data.filterAdminUnitPremium ?? true);
-        setFilterDuplicatePremium(data.filterDuplicatePremium ?? true);
-      } else {
-        setDoc(globalRef, { 
-          isGlobalPremium: false,
-          filterDateRangePremium: true,
-          filterGenderFormatPremium: true,
-          filterAdminUnitPremium: true,
-          filterDuplicatePremium: true
-        }).catch(console.error);
-      }
-    }, (error) => {
-      console.error("Error listening to global settings:", error);
-    });
-
     return () => {
       unsubscribe();
-      unsubGlobal();
     };
   }, []);
 
@@ -178,8 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider value={{ 
-      user, profile, isGlobalPremium, 
-      filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium,
+      user, profile, 
       loading, needsProfileSetup, 
       loginWithGoogle, loginWithEmail, registerWithEmail, loginWithPhone,
       logout, setupProfile 
