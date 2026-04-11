@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, updateDoc, orderBy, deleteDoc } from 'firebase/firestore';
 import { UserProfile, useAuth } from '../context/AuthContext';
 import { 
   Users, 
@@ -24,7 +25,10 @@ import {
   Bell,
   Terminal,
   BarChart3,
-  RefreshCcw
+  RefreshCcw,
+  Info,
+  ClipboardList,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -39,18 +43,18 @@ import {
   Area
 } from 'recharts';
 
+const YesNoBadge = ({ value }: { value: boolean }) => (
+  <span className={`px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${value ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'}`}>
+    {value ? 'Có' : 'K'}
+  </span>
+);
+
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
-  const { 
-    isGlobalPremium, 
-    filterDateRangePremium, filterGenderFormatPremium, filterAdminUnitPremium, filterDuplicatePremium, filterRowLimitPremium 
-  } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'payments' | 'settings'>('dashboard');
+  const [onlineScreenings, setOnlineScreenings] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'screenings' | 'settings'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [premiumPrice, setPremiumPrice] = useState('99.000');
-  const [isUpdatingPrice, setIsUpdatingPrice] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean;
     title: string;
@@ -70,7 +74,6 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const now = new Date();
     const last7Days = [];
-    const price = parseInt(premiumPrice.replace(/\./g, ''), 10) || 99000;
     
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
@@ -80,36 +83,39 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
       const dayEnd = dayStart + 24 * 60 * 60 * 1000;
       
       const dayUsers = users.filter(u => u.createdAt >= dayStart && u.createdAt < dayEnd).length;
-      const dayRevenue = payments.filter(p => p.status === 'approved' && p.createdAt >= dayStart && p.createdAt < dayEnd).length;
       
       last7Days.push({
         name: days[d.getDay()],
-        users: dayUsers,
-        revenue: dayRevenue * price
+        users: dayUsers
       });
     }
     return last7Days;
-  }, [users, payments, premiumPrice]);
+  }, [users]);
 
   useEffect(() => {
     const qUsers = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
     const unsubUsers = onSnapshot(qUsers, (snap) => {
       const usersData: UserProfile[] = [];
-      snap.forEach(doc => usersData.push(doc.data() as UserProfile));
+      snap.forEach(doc => {
+        const data = doc.data() as UserProfile;
+        usersData.push({ ...data, uid: doc.id });
+      });
       setUsers(usersData);
       setLoading(false);
     });
 
-    const qPayments = query(collection(db, 'payments'), orderBy('createdAt', 'desc'));
-    const unsubPayments = onSnapshot(qPayments, (snap) => {
-      const paymentsData: any[] = [];
-      snap.forEach(doc => paymentsData.push({ id: doc.id, ...doc.data() }));
-      setPayments(paymentsData);
+    const qScreenings = query(collection(db, 'online_screenings'), orderBy('createdAt', 'desc'));
+    const unsubScreenings = onSnapshot(qScreenings, (snap) => {
+      const screeningsData: any[] = [];
+      snap.forEach(doc => {
+        screeningsData.push({ ...doc.data(), id: doc.id });
+      });
+      setOnlineScreenings(screeningsData);
     });
 
     return () => {
       unsubUsers();
-      unsubPayments();
+      unsubScreenings();
     };
   }, []);
 
@@ -139,56 +145,37 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     });
   };
 
-  const toggleGlobalPremium = async () => {
+  const toggleSubAdmin = async (uid: string, currentRole: string) => {
+    if (currentRole === 'admin') return; // Cannot change main admin role here
+    const newRole = currentRole === 'subadmin' ? 'user' : 'subadmin';
     setConfirmModal({
       show: true,
-      title: isGlobalPremium ? 'Tắt Global Premium' : 'Bật Global Premium',
-      message: `Bạn có chắc chắn muốn ${isGlobalPremium ? 'tắt' : 'bật'} chế độ Global Premium cho toàn bộ hệ thống không?`,
-      type: isGlobalPremium ? 'warning' : 'danger',
+      title: currentRole === 'subadmin' ? 'Hủy quyền Admin phó' : 'Cấp quyền Admin phó',
+      message: `Bạn có chắc chắn muốn ${currentRole === 'subadmin' ? 'hủy' : 'cấp'} quyền Admin phó cho người dùng này không?`,
+      type: 'warning',
       onConfirm: async () => {
-        await updateDoc(doc(db, 'settings', 'global'), { isGlobalPremium: !isGlobalPremium });
-        setConfirmModal(prev => ({ ...prev, show: false }));
-      }
-    });
-  };
-
-  const approvePayment = async (paymentId: string, uid: string) => {
-    setConfirmModal({
-      show: true,
-      title: 'Phê duyệt thanh toán',
-      message: 'Bạn có chắc chắn muốn phê duyệt giao dịch này không? Người dùng sẽ được nâng cấp lên Premium ngay lập tức.',
-      type: 'info',
-      onConfirm: async () => {
-        await updateDoc(doc(db, 'payments', paymentId), { status: 'approved' });
-        await updateDoc(doc(db, 'users', uid), { isPremium: true });
-        setConfirmModal(prev => ({ ...prev, show: false }));
-      }
-    });
-  };
-
-  const rejectPayment = async (paymentId: string) => {
-    setConfirmModal({
-      show: true,
-      title: 'Từ chối thanh toán',
-      message: 'Bạn có chắc chắn muốn từ chối giao dịch này không?',
-      type: 'danger',
-      onConfirm: async () => {
-        await updateDoc(doc(db, 'payments', paymentId), { status: 'rejected' });
+        await updateDoc(doc(db, 'users', uid), { role: newRole });
         setConfirmModal(prev => ({ ...prev, show: false }));
       }
     });
   };
 
   const filteredUsers = users.filter(u => 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.organization.toLowerCase().includes(searchTerm.toLowerCase())
+    (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (u.organization || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredScreenings = onlineScreenings.filter(s => 
+    (s.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.address || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const exportUsers = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
       + "Name,Email,Organization,Premium,Blocked\n"
-      + users.map(u => `${u.displayName},${u.email},${u.organization},${u.isPremium},${u.isBlocked}`).join("\n");
+      + users.map(u => `${u.displayName || ''},${u.email || ''},${u.organization || ''},${u.isPremium},${u.isBlocked}`).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -198,42 +185,103 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     document.body.removeChild(link);
   };
 
-  const updatePremiumPrice = async () => {
-    setIsUpdatingPrice(true);
-    try {
-      await updateDoc(doc(db, 'settings', 'global'), { premiumPrice });
-      alert('Đã cập nhật giá gói Premium!');
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsUpdatingPrice(false);
-    }
+  const exportScreenings = () => {
+    const exportData = onlineScreenings.map(s => {
+      const sbp = Math.max(parseFloat(s.sbp1) || 0, parseFloat(s.sbp2) || 0);
+      const dbp = Math.max(parseFloat(s.dbp1) || 0, parseFloat(s.dbp2) || 0);
+      
+      const dtdConclusion = s.diabetesRiskScore >= 6 ? 'Nguy cơ cao' : 'Nguy cơ thấp';
+      const copdConclusion = s.copdCount >= 3 ? 'Nghi ngờ COPD' : 'Bình thường';
+      const asthmaConclusion = s.asthmaCount >= 2 ? 'Nghi ngờ Hen' : 'Bình thường';
+      const date = s.createdAt?.seconds ? new Date(s.createdAt.seconds * 1000).toLocaleString('vi-VN') : 'N/A';
+
+      const yesNo = (val: any) => val === true ? 'Có' : 'Không';
+
+      return {
+        'Người điều tra': s.investigator || 'N/A',
+        'Đơn vị công tác': s.workUnit || 'N/A',
+        'Xã/Phường': s.ward || 'N/A',
+        'Ngày thực hiện': s.executionDate || 'N/A',
+        'Họ tên': s.fullName,
+        'Năm sinh': s.birthYear,
+        'Giới tính': s.gender,
+        'Số điện thoại': s.phone,
+        'Địa chỉ': s.address,
+        'Chiều cao (m)': s.height,
+        'Cân nặng (kg)': s.weight,
+        'BMI': (s.bmi || 0).toFixed(1),
+        'Vòng bụng (cm)': s.waist,
+        'Đang mắc THA': yesNo(s.hasHypertension),
+        'Đang mắc ĐTD': yesNo(s.hasDiabetes),
+        'Đang mắc Ung thư': yesNo(s.hasCancer),
+        'HA lần 1': `${s.sbp1}/${s.dbp1}`,
+        'HA lần 2': `${s.sbp2}/${s.dbp2}`,
+        'Đường huyết (mmol/L)': s.bloodSugar,
+        'Gia đình ĐTD': yesNo(s.familyDiabetes),
+        'Gia đình THA': yesNo(s.familyHypertension),
+        'Gia đình Ung thư': yesNo(s.familyCancer),
+        'Ăn thiếu rau': yesNo(s.lowVeggie),
+        'Ăn mặn': yesNo(s.highSalt),
+        'Hút thuốc': yesNo(s.smoking),
+        'Stress': yesNo(s.stress),
+        'Ít vận động': yesNo(s.lowPhysicalActivity),
+        'Rượu bia': yesNo(s.highAlcohol),
+        'ĐTD thai kỳ': yesNo(s.gestationalDiabetes),
+        'Dấu hiệu THA': yesNo(s.signHTN),
+        'Dấu hiệu ĐTD': yesNo(s.signDiabetes),
+        'Dấu hiệu Ung thư': yesNo(s.signCancer),
+        'COPD-C1 (Ho)': yesNo(s.copd_q1),
+        'COPD-C2 (Đờm)': yesNo(s.copd_q2),
+        'COPD-C3 (Khó thở)': yesNo(s.copd_q3),
+        'COPD-C4 (>40 tuổi)': yesNo(s.age >= 40),
+        'COPD-C5 (Hút thuốc)': yesNo(s.copd_q5),
+        'Điểm COPD': s.copdCount,
+        'Kết luận COPD': copdConclusion,
+        'Hen-C1': yesNo(s.asthma_q1),
+        'Hen-C2': yesNo(s.asthma_q2),
+        'Hen-C3': yesNo(s.asthma_q3),
+        'Hen-C4': yesNo(s.asthma_q4),
+        'Hen-C5': yesNo(s.asthma_q5),
+        'Hen-C6': yesNo(s.asthma_q6),
+        'Hen-C7': yesNo(s.asthma_q7),
+        'Điểm Hen': s.asthmaCount,
+        'Kết luận Hen': asthmaConclusion,
+        'Điểm ĐTD': s.diabetesRiskScore,
+        'Kết luận ĐTD': dtdConclusion,
+        'Ngày hệ thống': date
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sàng lọc Online");
+    XLSX.writeFile(wb, "bmass_online_screenings.xlsx");
   };
 
-  useEffect(() => {
-    const unsubSettings = onSnapshot(doc(db, 'settings', 'global'), (doc) => {
-      if (doc.exists()) {
-        setPremiumPrice(doc.data().premiumPrice || '99.000');
+  const deleteScreening = async (id: string) => {
+    setConfirmModal({
+      show: true,
+      title: 'Xóa kết quả sàng lọc',
+      message: 'Bạn có chắc chắn muốn xóa kết quả sàng lọc này không? Hành động này không thể hoàn tác.',
+      type: 'danger',
+      onConfirm: async () => {
+        await deleteDoc(doc(db, 'online_screenings', id));
+        setConfirmModal(prev => ({ ...prev, show: false }));
       }
     });
-    return () => unsubSettings();
-  }, []);
+  };
 
   const stats = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     const todayStart = now.getTime();
     
-    const price = parseInt(premiumPrice.replace(/\./g, ''), 10) || 99000;
-    
     return {
       totalUsers: users.length,
       premiumUsers: users.filter(u => u.isPremium).length,
-      pendingPayments: payments.filter(p => p.status === 'pending').length,
-      totalRevenue: payments.filter(p => p.status === 'approved').length * price,
       activeToday: users.filter(u => u.createdAt >= todayStart).length
     };
-  }, [users, payments, premiumPrice]);
+  }, [users]);
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
@@ -280,14 +328,12 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               <span className="ml-auto px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[10px]">{users.length}</span>
             </button>
             <button 
-              onClick={() => setActiveTab('payments')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'payments' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+              onClick={() => setActiveTab('screenings')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'screenings' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
             >
-              <CreditCard size={18} />
-              Thanh toán
-              {stats.pendingPayments > 0 && (
-                <span className="ml-auto px-2 py-0.5 bg-amber-100 text-amber-600 rounded-md text-[10px] animate-pulse">{stats.pendingPayments}</span>
-              )}
+              <ClipboardList size={18} />
+              Sàng lọc Online
+              <span className="ml-auto px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[10px]">{onlineScreenings.length}</span>
             </button>
             <button 
               onClick={() => setActiveTab('settings')}
@@ -335,20 +381,20 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                       <Activity size={16} className="text-indigo-500" />
                     </div>
                     <div>
-                      <p className="text-3xl font-black text-slate-900">{stats.pendingPayments}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Chờ phê duyệt</p>
+                      <p className="text-3xl font-black text-slate-900">{stats.activeToday}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Người dùng mới hôm nay</p>
                     </div>
                   </div>
                   <div className="bg-slate-900 p-6 rounded-3xl shadow-xl shadow-slate-200 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="p-3 bg-slate-800 text-slate-400 rounded-2xl">
-                        <TrendingUp size={20} />
+                        <Shield size={20} />
                       </div>
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
                     </div>
                     <div>
-                      <p className="text-2xl font-black text-white">{(stats.totalRevenue / 1000000).toFixed(1)}M</p>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Ước tính doanh thu</p>
+                      <p className="text-2xl font-black text-white">System Active</p>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Trạng thái hệ thống</p>
                     </div>
                   </div>
                 </div>
@@ -363,11 +409,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5">
                         <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Người dùng</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Doanh thu</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Người dùng mới</span>
                       </div>
                     </div>
                   </div>
@@ -388,24 +430,19 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                           tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} 
                           dy={10}
                         />
-                        <YAxis yAxisId="left" hide />
-                        <YAxis yAxisId="right" orientation="right" hide />
+                        <YAxis hide />
                         <Tooltip 
                           contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                           itemStyle={{ fontSize: '12px', fontWeight: 700 }}
-                          formatter={(value: number, name: string) => {
-                            if (name === 'revenue') return [new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value), 'Doanh thu'];
-                            return [value, 'Người dùng'];
-                          }}
+                          formatter={(value: number) => [value, 'Người dùng mới']}
                         />
-                        <Area yAxisId="left" type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
-                        <Area yAxisId="right" type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={3} fill="transparent" />
+                        <Area type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6">
                   <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
                     <div className="p-5 border-b border-slate-50 flex items-center justify-between">
                       <h4 className="font-bold text-slate-800 flex items-center gap-2">
@@ -415,52 +452,18 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                       <button onClick={() => setActiveTab('users')} className="text-[10px] font-bold text-blue-600 hover:underline">Xem tất cả</button>
                     </div>
                     <div className="divide-y divide-slate-50">
-                      {users.slice(0, 5).map(u => (
+                      {users.slice(0, 10).map(u => (
                         <div key={u.uid} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-xs">
-                              {u.displayName.charAt(0)}
+                              {(u.displayName || 'U').charAt(0)}
                             </div>
                             <div>
-                              <p className="text-sm font-bold text-slate-700">{u.displayName}</p>
-                              <p className="text-[10px] text-slate-400">{u.email}</p>
+                              <p className="text-sm font-bold text-slate-700">{u.displayName || 'Người dùng'}</p>
+                              <p className="text-[10px] text-slate-400">{u.email || 'No email'}</p>
                             </div>
                           </div>
                           <ChevronRight size={16} className="text-slate-300" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="p-5 border-b border-slate-50 flex items-center justify-between">
-                      <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                        <CreditCard size={16} className="text-amber-600" />
-                        Giao dịch gần đây
-                      </h4>
-                      <button onClick={() => setActiveTab('payments')} className="text-[10px] font-bold text-blue-600 hover:underline">Xem tất cả</button>
-                    </div>
-                    <div className="divide-y divide-slate-50">
-                      {payments.slice(0, 5).map(p => (
-                        <div key={p.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs ${
-                              p.status === 'approved' ? 'bg-green-50 text-green-600' : 
-                              p.status === 'rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
-                            }`}>
-                              <CreditCard size={16} />
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-slate-700">{p.email}</p>
-                              <p className="text-[10px] text-slate-400">{new Date(p.createdAt).toLocaleDateString()}</p>
-                            </div>
-                          </div>
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${
-                            p.status === 'approved' ? 'text-green-600' : 
-                            p.status === 'rejected' ? 'text-red-600' : 'text-amber-600'
-                          }`}>
-                            {p.status}
-                          </span>
                         </div>
                       ))}
                     </div>
@@ -506,6 +509,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                         <tr className="bg-slate-50/50 border-b border-slate-100">
                           <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Người dùng</th>
                           <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Đơn vị / IP</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Vai trò</th>
                           <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Premium</th>
                           <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Trạng thái</th>
                           <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Hành động</th>
@@ -517,17 +521,35 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
-                                  {u.displayName.charAt(0)}
+                                  {(u.displayName || 'U').charAt(0)}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-bold text-slate-800">{u.displayName}</p>
-                                  <p className="text-[10px] text-slate-400">{u.email}</p>
+                                  <p className="text-sm font-bold text-slate-800">{u.displayName || 'Người dùng'}</p>
+                                  <p className="text-[10px] text-slate-400">{u.email || 'No email'}</p>
                                 </div>
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <p className="text-xs font-bold text-slate-600">{u.organization}</p>
-                              <p className="text-[10px] text-slate-400 font-mono mt-1">{u.lastIp}</p>
+                              <p className="text-xs font-bold text-slate-600">{u.organization || 'N/A'}</p>
+                              <p className="text-[10px] text-slate-400 font-mono mt-1">{u.lastIp || 'No IP'}</p>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              {u.role === 'admin' ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-purple-50 text-purple-600">
+                                  <Shield size={12} />
+                                  Admin
+                                </span>
+                              ) : (
+                                <button 
+                                  onClick={() => toggleSubAdmin(u.uid, u.role)}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                                    u.role === 'subadmin' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  <Shield size={12} />
+                                  {u.role === 'subadmin' ? 'Admin phó' : 'User'}
+                                </button>
+                              )}
                             </td>
                             <td className="px-6 py-4 text-center">
                               <button 
@@ -570,75 +592,184 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {activeTab === 'payments' && (
+            {activeTab === 'screenings' && (
               <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Danh sách giao dịch</h4>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Tổng cộng: {payments.length} giao dịch
+                <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                  <div className="relative w-full sm:w-96">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                      type="text" 
+                      placeholder="Tìm kiếm theo tên, SĐT, địa chỉ..." 
+                      className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-3 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={exportScreenings}
+                      className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-blue-600 transition-all shadow-sm"
+                      title="Xuất danh sách sàng lọc"
+                    >
+                      <Download size={18} />
+                    </button>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2">
+                      {filteredScreenings.length} / {onlineScreenings.length} bản ghi
+                    </div>
                   </div>
                 </div>
+
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
                   <div className="overflow-x-auto no-scrollbar">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse min-w-[4000px]">
                       <thead>
                         <tr className="bg-slate-50/50 border-b border-slate-100">
-                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Người dùng</th>
-                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Thời gian</th>
-                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Trạng thái</th>
-                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Hành động</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest sticky left-0 bg-white z-20 border-r border-slate-100">Họ tên</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Người điều tra</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Đơn vị</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Xã/Phường</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ngày thực hiện</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Năm sinh</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Giới tính</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">SĐT</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Địa chỉ</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">BMI</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vòng bụng</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">HA Lần 1</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">HA Lần 2</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Đường huyết</th>
+                          
+                          {/* Tiền sử gia đình */}
+                          <th className="px-2 py-4 text-[9px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50/30">GĐ ĐTD</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50/30">GĐ THA</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50/30">GĐ UT</th>
+                          
+                          {/* Yếu tố nguy cơ */}
+                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Thiếu rau</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Ăn mặn</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Hút thuốc</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Stress</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Ít VĐ</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Rượu bia</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Thai kỳ</th>
+                          
+                          {/* Dấu hiệu nghi ngờ */}
+                          <th className="px-2 py-4 text-[9px] font-black text-red-600 uppercase tracking-tighter bg-red-50/30">Nghi THA</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-red-600 uppercase tracking-tighter bg-red-50/30">Nghi ĐTD</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-red-600 uppercase tracking-tighter bg-red-50/30">Nghi UT</th>
+                          
+                          {/* COPD */}
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C1</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C2</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C3</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C4</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C5</th>
+                          
+                          {/* Hen */}
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C1</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C2</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C3</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C4</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C5</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C6</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C7</th>
+                          
+                          {/* Kết luận */}
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-900 uppercase tracking-widest bg-slate-100">KL ĐTD</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-900 uppercase tracking-widest bg-slate-100">KL COPD</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-900 uppercase tracking-widest bg-slate-100">KL Hen</th>
+                          
+                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right sticky right-0 bg-white z-20 border-l border-slate-100">Hành động</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
-                        {payments.map(p => (
-                          <tr key={p.id} className="hover:bg-slate-50/30 transition-colors group">
-                            <td className="px-6 py-4">
-                              <p className="text-sm font-bold text-slate-800">{p.email}</p>
-                              <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {p.id.slice(0, 8)}...</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2 text-slate-500">
-                                <Clock size={14} />
-                                <span className="text-xs font-medium">{new Date(p.createdAt).toLocaleString()}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-                                p.status === 'approved' ? 'bg-green-50 text-green-600' : 
-                                p.status === 'rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
-                              }`}>
-                                {p.status === 'approved' ? <CheckCircle size={12} /> : 
-                                 p.status === 'rejected' ? <XCircle size={12} /> : <Clock size={12} />}
-                                {p.status === 'pending' ? 'Chờ duyệt' : p.status === 'approved' ? 'Đã duyệt' : 'Từ chối'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                {p.status === 'pending' && (
-                                  <>
-                                    <button 
-                                      onClick={() => approvePayment(p.id, p.uid)}
-                                      className="p-2 text-green-600 hover:bg-green-50 rounded-xl transition-all"
-                                      title="Phê duyệt"
-                                    >
-                                      <CheckCircle size={18} />
-                                    </button>
-                                    <button 
-                                      onClick={() => rejectPayment(p.id)}
-                                      className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                                      title="Từ chối"
-                                    >
-                                      <XCircle size={18} />
-                                    </button>
-                                  </>
-                                )}
-                                <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
-                                  <ExternalLink size={18} />
+                        {filteredScreenings.map(s => {
+                          const sbp = Math.max(parseFloat(s.sbp1) || 0, parseFloat(s.sbp2) || 0);
+                          const dbp = Math.max(parseFloat(s.dbp1) || 0, parseFloat(s.dbp2) || 0);
+                          const isHighBP = sbp >= 140 || dbp >= 90;
+                          
+                          return (
+                            <tr key={s.id} className="hover:bg-slate-50/30 transition-colors group">
+                              <td className="px-4 py-4 sticky left-0 bg-white group-hover:bg-slate-50/30 z-10 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                <p className="text-sm font-bold text-slate-800 whitespace-nowrap">{s.fullName}</p>
+                              </td>
+                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.investigator || '-'}</td>
+                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.workUnit || '-'}</td>
+                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.ward || '-'}</td>
+                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.executionDate || '-'}</td>
+                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.birthYear}</td>
+                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.gender}</td>
+                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.phone}</td>
+                              <td className="px-4 py-4 text-xs text-slate-400 truncate max-w-[200px]">{s.address}</td>
+                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{(s.bmi || 0).toFixed(1)}</td>
+                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{s.waist}cm</td>
+                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{s.sbp1}/{s.dbp1}</td>
+                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{s.sbp2}/{s.dbp2}</td>
+                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{s.bloodSugar || '-'}</td>
+                              
+                              {/* Tiền sử GĐ */}
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.familyDiabetes} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.familyHypertension} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.familyCancer} /></td>
+                              
+                              {/* Yếu tố nguy cơ */}
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.lowVeggie} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.highSalt} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.smoking} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.stress} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.lowPhysicalActivity} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.highAlcohol} /></td>
+                              <td className="px-2 py-4 text-center">{s.gender === 'Nữ' ? <YesNoBadge value={s.gestationalDiabetes} /> : '-'}</td>
+                              
+                              {/* Dấu hiệu nghi ngờ */}
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.signHTN} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.signDiabetes} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.signCancer} /></td>
+                              
+                              {/* COPD */}
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_q1} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_q2} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_q3} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.age >= 40} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_q5} /></td>
+                              
+                              {/* Hen */}
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q1} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q2} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q3} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q4} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q5} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q6} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q7} /></td>
+                              
+                              {/* Kết luận riêng biệt */}
+                              <td className="px-4 py-4">
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${s.diabetesRiskScore >= 6 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                  {s.diabetesRiskScore >= 6 ? 'Nguy cơ' : 'Bình thường'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4">
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${s.copdCount >= 3 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                  {s.copdCount >= 3 ? 'Nghi ngờ' : 'Bình thường'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4">
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${s.asthmaCount >= 2 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                  {s.asthmaCount >= 2 ? 'Nghi ngờ' : 'Bình thường'}
+                                </span>
+                              </td>
+                              
+                              <td className="px-4 py-4 text-right sticky right-0 bg-white group-hover:bg-slate-50/30 z-10 border-l border-slate-100 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                <button 
+                                  onClick={() => deleteScreening(s.id)}
+                                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                >
+                                  <Trash2 size={16} />
                                 </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -649,89 +780,27 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             {activeTab === 'settings' && (
               <div className="space-y-6">
                 <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-8">
-                  <div className="border-t border-slate-100 pt-8 space-y-6">
+                  <div className="space-y-6">
                     <div className="flex items-start justify-between gap-6">
                       <div className="space-y-2">
                         <h4 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                          <Unlock size={20} className="text-blue-600" />
-                          Chế độ Global Premium
+                          <Shield size={20} className="text-blue-600" />
+                          Quản lý tính năng nâng cao
                         </h4>
                         <p className="text-sm text-slate-500 leading-relaxed max-w-md">
-                          Bật tùy chọn này sẽ tự động mở khóa <span className="font-bold text-slate-900">TẤT CẢ</span> tính năng nâng cao cho mọi người dùng.
+                          Hiện tại tất cả tính năng lọc dữ liệu đã được mở khóa cho mọi người dùng. Tính năng <span className="font-bold text-slate-900">Cấu hình đường huyết</span> vẫn được giới hạn cho Admin và người dùng được cấp quyền.
                         </p>
                       </div>
-                      <button 
-                        onClick={toggleGlobalPremium}
-                        className={`relative inline-flex h-8 w-14 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isGlobalPremium ? 'bg-blue-600 shadow-lg shadow-blue-200' : 'bg-slate-200'}`}
-                      >
-                        <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-300 ${isGlobalPremium ? 'translate-x-7' : 'translate-x-1'}`} />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {[
-                        { id: 'filterDateRangePremium', label: 'Lọc theo ngày (Premium)', current: filterDateRangePremium },
-                        { id: 'filterGenderFormatPremium', label: 'Định dạng giới tính (Premium)', current: filterGenderFormatPremium },
-                        { id: 'filterAdminUnitPremium', label: 'Đơn vị hành chính (Premium)', current: filterAdminUnitPremium },
-                        { id: 'filterDuplicatePremium', label: 'Lọc trùng BHYT (Premium)', current: filterDuplicatePremium },
-                        { id: 'filterRowLimitPremium', label: 'Giới hạn 1000 dòng (Premium)', current: filterRowLimitPremium }
-                      ].map((filter) => (
-                        <div key={filter.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                          <span className="text-xs font-bold text-slate-700">{filter.label}</span>
-                          <button 
-                            onClick={async () => {
-                              await updateDoc(doc(db, 'settings', 'global'), { [filter.id]: !filter.current });
-                            }}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 ${filter.current ? 'bg-blue-600' : 'bg-slate-200'}`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${filter.current ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                        </div>
-                      ))}
                     </div>
                   </div>
 
-                  <div className="p-6 bg-amber-50 border border-amber-100 rounded-2xl flex items-start gap-4">
-                    <AlertTriangle className="text-amber-600 mt-0.5 flex-shrink-0" size={20} />
+                  <div className="p-6 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-4">
+                    <Info className="text-blue-600 mt-0.5 flex-shrink-0" size={20} />
                     <div>
-                      <h5 className="text-sm font-bold text-amber-900">Lưu ý quan trọng</h5>
-                      <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                        Việc bật Global Premium sẽ vô hiệu hóa hệ thống thanh toán và cho phép truy cập không giới hạn. Chỉ sử dụng trong trường hợp bảo trì hoặc sự kiện đặc biệt.
+                      <h5 className="text-sm font-bold text-blue-900">Thông tin hệ thống</h5>
+                      <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+                        Hệ thống thanh toán đã được gỡ bỏ. Bạn có thể cấp quyền "Premium" thủ công cho người dùng trong tab "Người dùng" để họ sử dụng được tính năng Cấu hình đường huyết.
                       </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-6">
-                  <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                      <TrendingUp size={18} className="text-green-600" />
-                      Cấu hình gói cước
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                        <span className="text-xs font-bold text-slate-600">Giá gói Premium</span>
-                        <div className="flex items-center gap-2">
-                          <input 
-                            type="text" 
-                            className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-black text-slate-900 outline-none focus:ring-1 focus:ring-blue-500"
-                            value={premiumPrice}
-                            onChange={e => setPremiumPrice(e.target.value)}
-                          />
-                          <span className="text-xs font-black text-slate-900">đ</span>
-                          <button 
-                            onClick={updatePremiumPrice}
-                            disabled={isUpdatingPrice}
-                            className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50"
-                          >
-                            {isUpdatingPrice ? <RefreshCcw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                        <span className="text-xs font-bold text-slate-600">Thời hạn sử dụng</span>
-                        <span className="text-xs font-black text-slate-900">Vĩnh viễn</span>
-                      </div>
                     </div>
                   </div>
                 </div>
