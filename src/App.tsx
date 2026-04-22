@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileOutput, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw, ShieldCheck, Check, LogIn, Menu, X } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileOutput, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw, ShieldCheck, Check, LogIn, Menu, X, Search, Wind } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AdminPanel from './components/AdminPanel';
@@ -29,10 +29,10 @@ const DTD_COLUMNS = [
 ];
 
 const SCREENING_COLUMNS = [
-  'Họ tên (*)', 'Giới tính (*)', 'Năm sinh (*)', 'Tuổi', 'Điểm Giới tính', 'Điểm Tuổi', 
-  'Gia đình mắc ĐTD', 'Điểm Gia đình', 'Chiều cao', 'Cân nặng', 'BMI', 'Điểm BMI', 
-  'Vòng eo', 'Điểm Vòng eo', 'HA tâm thu (*)', 'HA tâm trương (*)', 'Điểm Huyết áp', 
-  'Tổng điểm', 'Nguy cơ Đái tháo đường', 'Nghi ngờ Tăng huyết áp'
+  'Họ tên (*)', 'Giới tính (*)', 'Năm sinh (*)', 'Tuổi', 'Gia đình mắc ĐTD', 
+  'Chiều cao', 'Cân nặng', 'BMI', 'Vòng eo', 'HA tâm thu (*)', 'HA tâm trương (*)',
+  'Điểm Giới tính', 'Điểm Tuổi', 'Điểm Gia đình', 'Điểm BMI', 'Điểm Vòng eo', 'Điểm Huyết áp', 'Tổng điểm',
+  'Nguy cơ Đái tháo đường', 'Nghi ngờ Tăng huyết áp'
 ];
 
 const COPD_COLUMNS = [
@@ -41,7 +41,11 @@ const COPD_COLUMNS = [
   'COPD-C1', 'COPD-C2', 'COPD-C3', 'COPD-C4', 'COPD-C5', 'Nghi ngờ COPD'
 ];
 
-import OnlineScreeningForm from './components/OnlineScreeningForm';
+import { AdvancedConverter } from './components/AdvancedConverter';
+import { 
+  FileUp, Building2, LayoutGrid, ChevronDown, CheckCircle2,
+  Table, Activity as ActivityIcon, ArrowLeft
+} from 'lucide-react';
 
 function AdministrativeUnitModal({ onSelect, onClose }: { onSelect: (code: string) => void, onClose: () => void }) {
   const [manualCode, setManualCode] = useState('');
@@ -82,7 +86,7 @@ function AdministrativeUnitModal({ onSelect, onClose }: { onSelect: (code: strin
   );
 }
 
-function DownloadOptionsModal({ onConfirm, onClose, hasAdvancedAccess }: { onConfirm: (tha: boolean, dtd: boolean, over40: boolean, over50: boolean, screening: boolean, copd: boolean) => void, onClose: () => void, hasAdvancedAccess: boolean }) {
+function DownloadOptionsModal({ onConfirm, onClose }: { onConfirm: (tha: boolean, dtd: boolean, over40: boolean, over50: boolean, screening: boolean, copd: boolean) => void, onClose: () => void }) {
   const [tha, setTha] = useState(true);
   const [dtd, setDtd] = useState(true);
   const [over40, setOver40] = useState(false);
@@ -92,12 +96,12 @@ function DownloadOptionsModal({ onConfirm, onClose, hasAdvancedAccess }: { onCon
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+      <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl overflow-y-auto max-h-[90vh]">
         <h3 className="text-xl font-bold mb-4 flex items-center">
           <FileOutput className="mr-2 text-blue-600" />
           Tùy chọn tải xuống
         </h3>
-        <p className="text-sm text-gray-500 mb-6">Bạn chưa chọn khoảng ngày, hệ thống sẽ tải toàn bộ dữ liệu. Vui lòng chọn loại file muốn tải:</p>
+        <p className="text-sm text-gray-500 mb-6">Vui lòng chọn các loại file muốn tải:</p>
         
         <div className="space-y-3 mb-8">
           <button 
@@ -122,53 +126,49 @@ function DownloadOptionsModal({ onConfirm, onClose, hasAdvancedAccess }: { onCon
             {dtd ? <CheckSquare size={20} /> : <Square size={20} />}
           </button>
 
-          {hasAdvancedAccess && (
-            <>
-              <button 
-                onClick={() => setScreening(!screening)}
-                className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${screening ? 'border-green-600 bg-green-50 text-green-700' : 'border-gray-200 text-gray-600'}`}
-              >
-                <div className="flex items-center">
-                  <ShieldCheck size={18} className="mr-2" />
-                  <span className="font-medium">Sàng lọc THA & ĐTD</span>
-                </div>
-                {screening ? <CheckSquare size={20} /> : <Square size={20} />}
-              </button>
+          <button 
+            onClick={() => setOver40(!over40)}
+            className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${over40 ? 'border-amber-600 bg-amber-50 text-amber-700' : 'border-gray-200 text-gray-600'}`}
+          >
+            <div className="flex items-center">
+              <Users size={18} className="mr-2" />
+              <span className="font-medium">Trên 40 tuổi</span>
+            </div>
+            {over40 ? <CheckSquare size={20} /> : <Square size={20} />}
+          </button>
 
-              <button 
-                onClick={() => setCopd(!copd)}
-                className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${copd ? 'border-slate-600 bg-slate-50 text-slate-700' : 'border-gray-200 text-gray-600'}`}
-              >
-                <div className="flex items-center">
-                  <Info size={18} className="mr-2" />
-                  <span className="font-medium">Sàng lọc COPD & Hen</span>
-                </div>
-                {copd ? <CheckSquare size={20} /> : <Square size={20} />}
-              </button>
+          <button 
+            onClick={() => setOver50(!over50)}
+            className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${over50 ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-200 text-gray-600'}`}
+          >
+            <div className="flex items-center">
+              <Users size={18} className="mr-2" />
+              <span className="font-medium">Trên 50 tuổi</span>
+            </div>
+            {over50 ? <CheckSquare size={20} /> : <Square size={20} />}
+          </button>
 
-              <button 
-                onClick={() => setOver40(!over40)}
-                className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${over40 ? 'border-amber-600 bg-amber-50 text-amber-700' : 'border-gray-200 text-gray-600'}`}
-              >
-                <div className="flex items-center">
-                  <Users size={18} className="mr-2" />
-                  <span className="font-medium">Trên 40 tuổi</span>
-                </div>
-                {over40 ? <CheckSquare size={20} /> : <Square size={20} />}
-              </button>
+          <button 
+            onClick={() => setScreening(!screening)}
+            className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${screening ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600'}`}
+          >
+            <div className="flex items-center">
+              <Search size={18} className="mr-2" />
+              <span className="font-medium">Sàng lọc THA & ĐTĐ</span>
+            </div>
+            {screening ? <CheckSquare size={20} /> : <Square size={20} />}
+          </button>
 
-              <button 
-                onClick={() => setOver50(!over50)}
-                className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${over50 ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-200 text-gray-600'}`}
-              >
-                <div className="flex items-center">
-                  <Users size={18} className="mr-2" />
-                  <span className="font-medium">Trên 50 tuổi</span>
-                </div>
-                {over50 ? <CheckSquare size={20} /> : <Square size={20} />}
-              </button>
-            </>
-          )}
+          <button 
+            onClick={() => setCopd(!copd)}
+            className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${copd ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 text-gray-600'}`}
+          >
+            <div className="flex items-center">
+              <Wind size={18} className="mr-2" />
+              <span className="font-medium">Sàng lọc COPD & Hen</span>
+            </div>
+            {copd ? <CheckSquare size={20} /> : <Square size={20} />}
+          </button>
         </div>
 
         <div className="flex space-x-3">
@@ -194,7 +194,7 @@ function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) 
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full">
         <div className="flex justify-center mb-6">
-          <img src="https://hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-16 w-auto object-contain" />
+          <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-16 w-auto object-contain" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">Thiết lập hồ sơ</h2>
         <p className="text-gray-500 mb-6 text-center text-sm">Vui lòng cung cấp thông tin để tiếp tục sử dụng hệ thống.</p>
@@ -233,6 +233,41 @@ function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) 
   );
 }
 
+function Toggle({ enabled, onChange, label, description, icon: Icon, disabled = false }: { enabled: boolean, onChange: (val: boolean) => void, label: string, description?: string, icon?: any, disabled?: boolean }) {
+  return (
+    <button
+      onClick={() => !disabled && onChange(!enabled)}
+      disabled={disabled}
+      className={`group flex items-center justify-between p-4 rounded-2xl border transition-all ${
+        disabled 
+          ? 'opacity-50 cursor-not-allowed border-slate-100 bg-slate-50' 
+          : enabled 
+            ? 'bg-blue-50 border-blue-200 shadow-sm' 
+            : 'bg-white border-slate-100 hover:border-slate-200 shadow-sm'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        {Icon && (
+          <div className={`p-2 rounded-xl transition-colors ${enabled ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>
+            <Icon size={18} />
+          </div>
+        )}
+        <div className="text-left">
+          <p className={`text-sm font-bold ${enabled ? 'text-blue-900' : 'text-slate-700'}`}>{label}</p>
+          {description && <p className="text-[10px] text-slate-400 font-medium mt-0.5">{description}</p>}
+        </div>
+      </div>
+      <div className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${enabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
+        <motion.div 
+          animate={{ x: enabled ? 22 : 2 }}
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm"
+        />
+      </div>
+    </button>
+  );
+}
+
 function MainApp() {
   const { 
     user, profile, 
@@ -243,6 +278,7 @@ function MainApp() {
   const [showAdminUnit, setShowAdminUnit] = useState(false);
   const [showDownloadOptions, setShowDownloadOptions] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showAdvancedConverter, setShowAdvancedConverter] = useState(false);
 
   const [inputData, setInputData] = useState<any[]>([]);
   const [outputDataTHA, setOutputDataTHA] = useState<any[]>([]);
@@ -255,10 +291,205 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState<'THA' | 'DTD' | 'OVER40' | 'OVER50' | 'SCREENING' | 'COPD'>('THA');
   const [displayLimit, setDisplayLimit] = useState(50);
   const [processProgress, setProcessProgress] = useState(0);
+  const [patientStats, setPatientStats] = useState<any[]>([]);
 
   useEffect(() => {
     setDisplayLimit(50);
   }, [activeTab, inputData]);
+
+  useEffect(() => {
+    if (inputData.length > 0) {
+      const visitMap = new Map();
+      const currentYear = new Date().getFullYear();
+
+      const getVal = (row: any, keys: string[]) => {
+        for (const key of keys) {
+          if (row[key] !== undefined && row[key] !== null && row[key] !== '') return row[key];
+        }
+        return '';
+      };
+
+      inputData.forEach(row => {
+        const maBN = getVal(row, ['MA_BENH_NHAN', 'Mã bệnh nhân']);
+        const tenBN = getVal(row, ['TEN_BENH_NHAN', 'Họ tên', 'HO_TEN', 'Tên bệnh nhân']);
+        const ngayRaStr = getVal(row, ['NGAYRA', 'Ngày ra', 'Ngày khám']);
+        const bhyt = getVal(row, ['SO_THE_BHYT', 'Số thẻ BHYT']);
+        const diag = getVal(row, ['CHAN_DOAN', 'Chẩn đoán', 'ICD10']);
+        const diaChi = getVal(row, ['DIA_CHI', 'Địa chỉ', 'Address']);
+        
+        const namVal = getVal(row, ['NAM', 'Nam', 'Male']);
+        const nuVal = getVal(row, ['NU', 'Nữ', 'Female']);
+        const namSinhVal = getVal(row, ['NAM_SINH', 'Năm sinh', 'BirthYear']);
+        const tuoiVal = getVal(row, ['TUOI', 'Tuổi', 'Age']);
+        
+        const cccd = getVal(row, ['CCCD', 'CMND', 'Số căn cước', 'SO_CMND']);
+        const sdt = getVal(row, ['DIEN_THOAI', 'Số điện thoại', 'SO_DIEN_THOAI', 'SĐT']);
+        const weightRaw = getVal(row, ['CAN_NANG', 'Cân nặng', 'Weight']);
+        const heightRaw = getVal(row, ['CHIEU_CAO', 'Chiều cao', 'Height']);
+        const haCaoExtract = getVal(row, ['Huyết áp cao', 'HA_CAO', 'HA_TAM_THU', 'HA tâm thu']);
+        const haThapExtract = getVal(row, ['Huyết áp thấp', 'HA_THAP', 'HA_TAM_TRUONG', 'HA tâm trương']);
+
+        if (!maBN) return; // Skip if no ID
+
+        // Age calculation
+        let birthYear = '';
+        let gender = 'Không rõ';
+        if (namVal !== '') { gender = 'Nam'; birthYear = String(namVal); }
+        else if (nuVal !== '') { gender = 'Nữ'; birthYear = String(nuVal); }
+        else if (namSinhVal !== '') { birthYear = String(namSinhVal); }
+        
+        if (birthYear && birthYear.length > 4) {
+           const match = birthYear.match(/\d{4}/);
+           if (match) birthYear = match[0];
+        }
+        const age = birthYear ? currentYear - parseInt(birthYear, 10) : (tuoiVal ? parseInt(String(tuoiVal), 10) : 0);
+
+        let ageGroup = 'Không rõ';
+        if (age > 0) {
+           if (age < 40) ageGroup = '< 40 tuổi';
+           else if (age <= 49) ageGroup = '40-49 tuổi';
+           else if (age <= 59) ageGroup = '50-59 tuổi';
+           else ageGroup = '>= 60 tuổi';
+        }
+
+        const diagStr = String(diag).toUpperCase();
+        const hasTHA = diagStr.includes('I10') || diagStr.includes('I11') || diagStr.includes('I12') || diagStr.includes('I13') || diagStr.includes('I15');
+        const hasDTD = diagStr.includes('E10') || diagStr.includes('E11') || diagStr.includes('E12') || diagStr.includes('E13') || diagStr.includes('E14');
+        
+        let dateVal = 0;
+        let isCurrentYear = false;
+        
+        if (ngayRaStr) {
+          const str = String(ngayRaStr).trim();
+          const parts = str.split(/[-/]/);
+          if (parts.length >= 3) {
+            const y = parseInt(parts[2], 10);
+            if (y === currentYear || y === 2026) isCurrentYear = true;
+            dateVal = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+          } else {
+             const d = new Date(str);
+             dateVal = d.getTime();
+             if (d.getFullYear() === currentYear || d.getFullYear() === 2026) isCurrentYear = true;
+          }
+        }
+        if (isNaN(dateVal)) dateVal = 0;
+
+        if (visitMap.has(maBN)) {
+          const existing = visitMap.get(maBN);
+          existing.count += 1;
+          if (isCurrentYear) existing.countCurrentYear += 1;
+          
+          if (hasTHA) existing.hasTHA = true;
+          if (hasDTD) existing.hasDTD = true;
+          if (!existing.diaChi && diaChi) existing.diaChi = diaChi;
+          if (!existing.age && age) {
+             existing.age = age;
+             existing.gender = gender;
+             existing.ageGroup = ageGroup;
+          }
+          
+          if (dateVal >= existing.latestDateVal) {
+            existing.latestDateVal = dateVal;
+            existing.latestDateStr = ngayRaStr;
+            existing.diag = diag;
+            if (diaChi) existing.diaChi = diaChi; // latest address
+            if (cccd) existing.cccd = cccd;
+            if (sdt) existing.sdt = sdt;
+            if (weightRaw) existing.weight = weightRaw;
+            if (heightRaw) existing.height = heightRaw;
+            if (haCaoExtract) existing.haCao = haCaoExtract;
+            if (haThapExtract) existing.haThap = haThapExtract;
+          }
+        } else {
+          visitMap.set(maBN, {
+            maBN,
+            tenBN,
+            bhyt,
+            count: 1,
+            countCurrentYear: isCurrentYear ? 1 : 0,
+            latestDateVal: dateVal,
+            latestDateStr: ngayRaStr,
+            diag,
+            diaChi,
+            age,
+            birthYear,
+            gender,
+            ageGroup,
+            hasTHA,
+            hasDTD,
+            cccd,
+            sdt,
+            weight: weightRaw,
+            height: heightRaw,
+            haCao: haCaoExtract,
+            haThap: haThapExtract
+          });
+        }
+      });
+
+      const sorted = Array.from(visitMap.values()).sort((a, b) => b.count - a.count);
+      setPatientStats(sorted);
+    } else {
+      setPatientStats([]);
+    }
+  }, [inputData]);
+
+  const exportPatientStats = () => {
+    if (patientStats.length === 0) return;
+    
+    const exportData = patientStats.map((p, index) => {
+      let gioiTinh = p.gender;
+      if (genderFormat === 'number') {
+        gioiTinh = p.gender === 'Nam' ? '1' : (p.gender === 'Nữ' ? '2' : '');
+      }
+      
+      let phanLoai = 'Khác';
+      if (p.hasTHA && p.hasDTD) phanLoai = 'Tăng huyết áp, Đái tháo đường';
+      else if (p.hasTHA) phanLoai = 'Tăng huyết áp';
+      else if (p.hasDTD) phanLoai = 'Đái tháo đường';
+      
+      return {
+        'Stt': index + 1,
+        'Mã BN': p.maBN,
+        'Họ tên (*)': p.tenBN,
+        'Giới tính (*)': gioiTinh,
+        'Năm sinh (*)': p.birthYear || '', // If no birth year, it's blank
+        'Mã BHYT (*)': p.bhyt,
+        'Số CMT/CCCD (*)': p.cccd || '',
+        'Số điện thoại': p.sdt || '',
+        'Địa chỉ': p.diaChi,
+        'Xã/Phường/Thị trấn (*)': adminUnitCode || '',
+        'Ngày phát hiện bệnh': '',
+        'Nơi phát hiện': '',
+        'Ngày khám (*)': p.latestDateStr,
+        'Phân loại BN (*)': phanLoai,
+        'HA tâm thu (*)': p.haCao || '',
+        'HA tâm trương (*)': p.haThap || '',
+        'Cân nặng': p.weight || '',
+        'Chiều cao': p.height || '',
+        'Vòng eo': '',
+        'Hút thuốc lá': '',
+        'Mức độ uống rượu bia': '',
+        'Thực hành giảm ăn muối': '',
+        'Ăn đủ 400g rau và trái cây': '',
+        'Hoạt động thể lực đủ theo khuyến nghị': '',
+        'Chẩn đoán': p.diag,
+        'Thuốc điều trị': '',
+        'Số ngày nhận thuốc': '',
+        'Biến chứng': '',
+        'Kết quả điều trị': '',
+        'Ngày tái khám': '',
+        'Số lượt khám trong năm': p.countCurrentYear,
+        'Tổng số lượt khám': p.count
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "QuanLyLuotKham");
+    XLSX.writeFile(wb, "Danh_sach_benh_nhan_den_kham.xlsx");
+  };
+
   const [isProcessing, setIsProcessing] = useState(false);
   
   const [startDate, setStartDate] = useState('');
@@ -271,15 +502,16 @@ function MainApp() {
   const [removeDuplicates, setRemoveDuplicates] = useState(false);
   const [randomFamilyHistory, setRandomFamilyHistory] = useState(false);
   const [randomHeightWeight, setRandomHeightWeight] = useState(false);
-  const [randomCOPD, setRandomCOPD] = useState(false);
   const [randomBP, setRandomBP] = useState(false);
+  const [randomCOPD, setRandomCOPD] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = profile?.role === 'admin' || profile?.email === 'sonlyhongduc@gmail.com';
   const isSubAdmin = profile?.role === 'subadmin';
+  const isAuthorized = isAdmin || isSubAdmin;
   const hasPremiumAccess = true; // All features unlocked
-  const hasAdvancedAccess = isAdmin || isSubAdmin || profile?.isPremium; // Only for blood sugar configuration
+  const hasAdvancedAccess = isAdmin; // ONLY Admin can access advanced config
 
   const transformData = (data: any[], currentGenderFormat: 'text' | 'number', currentAdminUnit: string) => {
     const currentYear = new Date().getFullYear();
@@ -345,6 +577,8 @@ function MainApp() {
         if (match) birthYear = match[0];
       }
 
+      const formattedBirthYear = birthYear && birthYear.length === 4 ? `01/01/${birthYear}` : birthYear;
+
       const age = birthYear ? currentYear - parseInt(birthYear, 10) : 0;
 
       const diagnosis = getVal(row, ['CHAN_DOAN', 'Chẩn đoán', 'MA_BENH', 'ICD10']) || '';
@@ -389,7 +623,7 @@ function MainApp() {
       const commonFields = {
         'Họ tên (*)': getVal(row, ['TEN_BENH_NHAN', 'HO_TEN', 'Họ tên', 'Tên bệnh nhân']),
         'Giới tính (*)': gender,
-        'Năm sinh (*)': birthYear,
+        'Năm sinh (*)': formattedBirthYear,
         'Mã BHYT (*)': getVal(row, ['SO_THE_BHYT', 'MA_THE', 'Mã BHYT', 'Số thẻ BHYT']),
         'Số CMT/CCCD (*)': getVal(row, ['SO_CMT', 'CMND', 'CCCD', 'Số CMT/CCCD']),
         'Số điện thoại': getVal(row, ['DIEN_THOAI', 'Số điện thoại', 'SDT', 'Phone']),
@@ -439,84 +673,82 @@ function MainApp() {
       let bmi = 0;
       if (weight > 0 && height > 0) {
         const hMeter = height / 100;
-        bmi = weight / (hMeter * hMeter);
+        bmi = parseFloat((weight / (hMeter * hMeter)).toFixed(1));
       }
 
-      const waist = parseFloat(commonFields['Vòng eo']);
-
-      // Points calculation
-      let pGender = isMale ? 2 : 0;
-      let pAge = age < 45 ? 0 : (age <= 49 ? 1 : 2);
-      let pFamily = familyHistory === 'Có' ? 4 : 0;
-      let pBMI = bmi < 23 ? 0 : (bmi <= 27.5 ? 3 : 5);
+      const waist = parseFloat(getVal(row, ['VONG_EO', 'Vòng eo']));
+      const ptsGender = isMale ? 2 : 0;
+      const ptsAge = age < 45 ? 0 : (age <= 49 ? 1 : 2);
+      const ptsFamily = familyHistory === 'Có' ? 4 : 0;
+      const ptsBMI = bmi < 23 ? 0 : (bmi < 27.5 ? 3 : 5);
       
-      let pWaist = 0;
-      if (isMale) {
-        pWaist = waist >= 90 ? 2 : 0;
-      } else {
-        pWaist = waist >= 80 ? 2 : 0;
-      }
+      let ptsWaist = 0;
+      if (isMale) ptsWaist = waist >= 90 ? 2 : 0;
+      else ptsWaist = waist >= 80 ? 2 : 0;
 
-      let pBP = (sbp >= 140 || dbp >= 90) ? 2 : 0;
+      const ptsBP = (sbp >= 140 || dbp >= 90) ? 2 : 0;
+      const totalPts = ptsGender + ptsAge + ptsFamily + ptsBMI + ptsWaist + ptsBP;
 
-      const totalScore = pGender + pAge + pFamily + pBMI + pWaist + pBP;
+      screeningData.push({
+        ...commonFields,
+        'Tuổi': age,
+        'Gia đình mắc ĐTD': familyHistory,
+        'BMI': bmi || '',
+        'Vòng eo': waist || '',
+        'Điểm Giới tính': ptsGender,
+        'Điểm Tuổi': ptsAge,
+        'Điểm Gia đình': ptsFamily,
+        'Điểm BMI': ptsBMI,
+        'Điểm Vòng eo': ptsWaist,
+        'Điểm Huyết áp': ptsBP,
+        'Tổng điểm': totalPts,
+        'Nguy cơ Đái tháo đường': totalPts >= 6 ? 'Có' : 'Không',
+        'Nghi ngờ Tăng huyết áp': ptsBP > 0 ? 'Có' : 'Không'
+      });
 
-      if (age >= 40) {
-        screeningData.push({
-          'Họ tên (*)': commonFields['Họ tên (*)'],
-          'Giới tính (*)': commonFields['Giới tính (*)'],
-          'Năm sinh (*)': commonFields['Năm sinh (*)'],
-          'Tuổi': age || 'Không',
-          'Điểm Giới tính': pGender,
-          'Điểm Tuổi': pAge,
-          'Gia đình mắc ĐTD': familyHistory,
-          'Điểm Gia đình': pFamily,
-          'Chiều cao': height || 'Không',
-          'Cân nặng': weight || 'Không',
-          'BMI': bmi ? bmi.toFixed(1) : 'Không',
-          'Điểm BMI': pBMI,
-          'Vòng eo': waist || 'Không',
-          'Điểm Vòng eo': pWaist,
-          'HA tâm thu (*)': sbp || 'Không',
-          'HA tâm trương (*)': dbp || 'Không',
-          'Điểm Huyết áp': pBP,
-          'Tổng điểm': totalScore,
-          'Nguy cơ Đái tháo đường': totalScore >= 6 ? 'Có' : 'Không',
-          'Nghi ngờ Tăng huyết áp': sbp >= 140 ? 'Có' : 'Không'
-        });
-      }
+      // COPD & Hen logic
+      const getRandYN = (bias = 0.9) => Math.random() > bias ? 'Có' : 'Không';
+      const isMissingHen = (k: string) => {
+        const v = getVal(row, [k, k.replace('-', '_')]);
+        return !v || v.toLowerCase() === 'không' || v.toLowerCase().includes('trống');
+      };
 
-      if (age >= 50) {
-        const henAnswers = Array.from({ length: 7 }, () => (randomCOPD && isAdmin ? (Math.random() > 0.8 ? 'Có' : 'Không') : 'Không'));
-        const copdAnswers = Array.from({ length: 5 }, () => (randomCOPD && isAdmin ? (Math.random() > 0.8 ? 'Có' : 'Không') : 'Không'));
-        
-        // GOLD Question 4 is "Above 40 years old", which is true since age >= 50
-        copdAnswers[3] = 'Có';
+      const henFields: any = {};
+      const henKeys = ['Hen-C1', 'Hen-C2', 'Hen-C3', 'Hen-C4', 'Hen-C5', 'Hen-C6', 'Hen-C7'];
+      henKeys.forEach(k => {
+        const existing = getVal(row, [k, k.replace('-', '_')]);
+        if (randomCOPD && isAdmin && (!existing || existing === '')) {
+          henFields[k] = getRandYN(0.95);
+        } else {
+          henFields[k] = existing || 'Không';
+        }
+      });
 
-        const henCount = henAnswers.filter(a => a === 'Có').length;
-        const copdCount = copdAnswers.filter(a => a === 'Có').length;
+      const copdFields: any = {};
+      const copdKeys = ['COPD-C1', 'COPD-C2', 'COPD-C3', 'COPD-C4', 'COPD-C5'];
+      copdKeys.forEach(k => {
+        const existing = getVal(row, [k, k.replace('-', '_')]);
+        if (randomCOPD && isAdmin && (!existing || existing === '')) {
+          if (k === 'COPD-C4' && age >= 40) copdFields[k] = 'Có';
+          else copdFields[k] = getRandYN(0.92);
+        } else {
+          copdFields[k] = existing || 'Không';
+        }
+      });
 
-        copdData.push({
-          'Họ tên (*)': commonFields['Họ tên (*)'],
-          'Giới tính (*)': commonFields['Giới tính (*)'],
-          'Năm sinh (*)': commonFields['Năm sinh (*)'],
-          'Tuổi': age || 'Không',
-          'Hen-C1': henAnswers[0],
-          'Hen-C2': henAnswers[1],
-          'Hen-C3': henAnswers[2],
-          'Hen-C4': henAnswers[3],
-          'Hen-C5': henAnswers[4],
-          'Hen-C6': henAnswers[5],
-          'Hen-C7': henAnswers[6],
-          'Nghi ngờ Hen': henCount >= 2 ? 'Có' : 'Không',
-          'COPD-C1': copdAnswers[0],
-          'COPD-C2': copdAnswers[1],
-          'COPD-C3': copdAnswers[2],
-          'COPD-C4': copdAnswers[3],
-          'COPD-C5': copdAnswers[4],
-          'Nghi ngờ COPD': copdCount >= 3 ? 'Có' : 'Không'
-        });
-      }
+      const henCount = Object.values(henFields).filter(v => v === 'Có').length;
+      const copdCount = Object.values(copdFields).filter(v => v === 'Có').length;
+      
+      copdData.push({
+        'Họ tên (*)': commonFields['Họ tên (*)'],
+        'Giới tính (*)': commonFields['Giới tính (*)'],
+        'Năm sinh (*)': commonFields['Năm sinh (*)'],
+        'Tuổi': age,
+        ...henFields,
+        'Nghi ngờ Hen': henCount >= 2 ? 'Có' : 'Không',
+        ...copdFields,
+        'Nghi ngờ COPD': copdCount >= 3 ? 'Có' : 'Không'
+      });
     });
 
     return { thaData, dtdData, screeningData, copdData };
@@ -561,8 +793,6 @@ function MainApp() {
         
         if (thaData.length > 0) setActiveTab('THA');
         else if (dtdData.length > 0) setActiveTab('DTD');
-        else if (screeningData.length > 0) setActiveTab('SCREENING');
-        else if (copdData.length > 0) setActiveTab('COPD');
         
         setProcessProgress(100);
         setTimeout(() => setIsProcessing(false), 500);
@@ -601,6 +831,78 @@ function MainApp() {
     }
   };
 
+  const handleDownloadSample = () => {
+    const sampleHeaders = [
+      {
+        'STT': '1',
+        'NGAYRA': '15/10/2023',
+        'MA_BENH_NHAN': 'BN00123',
+        'SOPHIEUTHANHTOAN': 'PTT001',
+        'TEN_BENH_NHAN': 'Nguyễn Văn A',
+        'NAM': '1980',
+        'NU': '',
+        'DIA_CHI': 'Hà Nội',
+        'SO_THE_BHYT': 'DN4010123456789',
+        'NOI_GIOI_THIEU': '',
+        'TRIEUCHUNGLS': 'Đau đầu, nhức mỏi',
+        'CD_TUYEN_DUOI': '',
+        'CHAN_DOAN': 'I10 - Tăng huyết áp vô căn',
+        'CHAN_DOAN_KKB': '',
+        'VAO_VIEN': '0',
+        'TUYEN_TREN': '0',
+        'TUYENDUOI': '0',
+        'NGOAI_TRU': '1',
+        'VE_NHA': '0',
+        'TT': '1',
+        'CK': 'Nội khoa',
+        'TEN_BAC_SI': 'BS Trần B',
+        'Mạch': '80',
+        'Huyết áp thấp': '85',
+        'Huyết áp cao': '140',
+        'Nhịp thở': '20',
+        'Nhiệt độ': '37',
+        'Chiều cao': '165',
+        'Cân nặng': '65'
+      },
+      {
+        'STT': '2',
+        'NGAYRA': '16/10/2023',
+        'MA_BENH_NHAN': 'BN00124',
+        'SOPHIEUTHANHTOAN': 'PTT002',
+        'TEN_BENH_NHAN': 'Trần Thị B',
+        'NAM': '',
+        'NU': '1975',
+        'DIA_CHI': 'Hồ Chí Minh',
+        'SO_THE_BHYT': 'HC4010123456780',
+        'NOI_GIOI_THIEU': '',
+        'TRIEUCHUNGLS': 'Đường huyết cao',
+        'CD_TUYEN_DUOI': '',
+        'CHAN_DOAN': 'E11 - Đái tháo đường không phụ thuộc insulin',
+        'CHAN_DOAN_KKB': '',
+        'VAO_VIEN': '0',
+        'TUYEN_TREN': '0',
+        'TUYENDUOI': '0',
+        'NGOAI_TRU': '1',
+        'VE_NHA': '0',
+        'TT': '1',
+        'CK': 'Nội tiết',
+        'TEN_BAC_SI': 'BS Lê C',
+        'Mạch': '75',
+        'Huyết áp thấp': '80',
+        'Huyết áp cao': '120',
+        'Nhịp thở': '18',
+        'Nhiệt độ': '36.5',
+        'Chiều cao': '155',
+        'Cân nặng': '58'
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(sampleHeaders);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Mau_Du_Lieu");
+    XLSX.writeFile(wb, "Mau_Du_Lieu_Bmass.xlsx");
+  };
+
   const handleApplyAdminUnit = (code?: string) => {
     const targetCode = code || adminUnitCode;
     if (!targetCode) {
@@ -631,7 +933,7 @@ function MainApp() {
       setOutputDataScreening(screeningData);
       setOutputDataCOPD(copdData);
     }
-  }, [genderFormat, adminUnitCode, randomFamilyHistory, randomHeightWeight, randomCOPD, randomBP]);
+  }, [genderFormat, adminUnitCode, randomFamilyHistory, randomHeightWeight, randomBP, randomCOPD, inputData]);
 
   const handleClearFilters = () => {
     setStartDate('');
@@ -826,7 +1128,9 @@ function MainApp() {
     const uniqueMap = new Map<string, any>();
     allData.forEach(row => {
       const bhyt = String(row['Mã BHYT (*)'] || '').trim();
-      const birthYear = parseInt(row['Năm sinh (*)'], 10);
+      const namSinhStr = String(row['Năm sinh (*)'] || '');
+      const match = namSinhStr.match(/\d{4}/);
+      const birthYear = match ? parseInt(match[0], 10) : NaN;
       if (bhyt && !isNaN(birthYear) && (currentYear - birthYear) >= 40) {
         uniqueMap.set(bhyt, row);
       }
@@ -839,7 +1143,9 @@ function MainApp() {
     const uniqueMap = new Map<string, any>();
     allData.forEach(row => {
       const bhyt = String(row['Mã BHYT (*)'] || '').trim();
-      const birthYear = parseInt(row['Năm sinh (*)'], 10);
+      const namSinhStr = String(row['Năm sinh (*)'] || '');
+      const match = namSinhStr.match(/\d{4}/);
+      const birthYear = match ? parseInt(match[0], 10) : NaN;
       if (bhyt && !isNaN(birthYear) && (currentYear - birthYear) >= 50) {
         uniqueMap.set(bhyt, row);
       }
@@ -849,6 +1155,20 @@ function MainApp() {
 
   const currentBaseData = activeTab === 'THA' ? baseFilteredTHA : baseFilteredDTD;
   const duplicateStats = getDuplicateStats(currentBaseData);
+
+  const exportScreeningToExcel = (data: any[], fileName: string) => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data, { header: SCREENING_COLUMNS });
+    XLSX.utils.book_append_sheet(wb, ws, "Screening_Results");
+    XLSX.writeFile(wb, `${fileName}_Screening.xlsx`);
+  };
+
+  const exportCOPDToExcel = (data: any[], fileName: string) => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data, { header: COPD_COLUMNS });
+    XLSX.utils.book_append_sheet(wb, ws, "COPD_Hen_Results");
+    XLSX.writeFile(wb, `${fileName}_COPD_Hen.xlsx`);
+  };
 
   const handleDownload = () => {
     if (activeTab === 'OVER40') {
@@ -894,7 +1214,6 @@ function MainApp() {
 
     if (downloadOver40 && over40List.length > 0) {
       const wb = XLSX.utils.book_new();
-      // Use a combined set of columns or just THA_COLUMNS as base
       const ws = XLSX.utils.json_to_sheet(over40List, { header: Array.from(new Set([...THA_COLUMNS, ...DTD_COLUMNS])) });
       XLSX.utils.book_append_sheet(wb, ws, "Trên 40 tuổi");
       XLSX.writeFile(wb, `${originalName}_Tren40.xlsx`);
@@ -915,264 +1234,6 @@ function MainApp() {
       exportCOPDToExcel(outputDataCOPD, originalName);
     }
     setShowDownloadOptions(false);
-  };
-
-  const exportScreeningToExcel = (data: any[], fileName: string) => {
-    const wb = XLSX.utils.book_new();
-    
-    // Header rows
-    const header = [
-      ["DANH SÁCH SÀNG LỌC NGHI NGỜ THA, ĐTĐ"],
-      [],
-      ["Khóm/ấp:", "", "", "Phường/xã:", "", "", "", "", "", "", "Họ tên cộng tác viên:"],
-      ["Thành phố:", "", "", "Tỉnh:", "", "", "", "", "", "", ""],
-      [
-        "TT", 
-        "Họ tên", 
-        "KẾT QUẢ SÀNG LỌC", "", "", "", "", "", "", "", 
-        "ĐÁNH GIÁ"
-      ],
-      [
-        "", 
-        "", 
-        "Giới", 
-        "Tuổi", 
-        "Gia đình có người mắc ĐTĐ", 
-        "Chỉ số khối cơ thể", "", "", 
-        "Vòng eo", 
-        "Huyết áp", 
-        "Tổng điểm", 
-        "Nguy cơ mắc ĐTĐ", 
-        "Nghi ngờ THA"
-      ],
-      [
-        "", 
-        "", 
-        "Nữ = 0; Nam = 2", 
-        "< 45 = 0; 45 - 49 = 1; > 49 = 2", 
-        "Không = 0; Có = 4", 
-        "23 = 0; 23 - 27.5 = 3; > 27.5 = 5", "", "", 
-        "Nam < 90 = 0; Nam ≥ 90 = 2; Nữ < 80 = 0; Nữ ≥ 80 = 2", 
-        "< 140/90 = 0; ≥ 140/90 = 2", 
-        "", 
-        "Điểm 6 = Có; Điểm < 6 = ko", 
-        "< 140/90 = Ko; ≥ 140/90 = Có"
-      ],
-      [
-        "1", "2", "3", "4", "5", "CC", "CN", "BMI", "7", "8", "9", "10", "11"
-      ]
-    ];
-
-    const rows: any[] = [...header];
-
-    data.forEach((item, index) => {
-      // Row 1: Values
-      const row1 = [
-        index + 1,
-        item['Họ tên (*)'],
-        item['Giới tính (*)'],
-        item['Tuổi'],
-        item['Gia đình mắc ĐTD'],
-        item['Chiều cao'],
-        item['Cân nặng'],
-        item['BMI'],
-        item['Vòng eo'],
-        `${item['HA tâm thu (*)']}/${item['HA tâm trương (*)']}`,
-        item['Tổng điểm'],
-        item['Nguy cơ Đái tháo đường'],
-        item['Nghi ngờ Tăng huyết áp']
-      ];
-      
-      // Row 2: Points
-      const row2 = [
-        "",
-        "Điểm nguy cơ",
-        item['Điểm Giới tính'],
-        item['Điểm Tuổi'],
-        item['Điểm Gia đình'],
-        "",
-        "",
-        item['Điểm BMI'],
-        item['Điểm Vòng eo'],
-        item['Điểm Huyết áp'],
-        "",
-        "",
-        ""
-      ];
-      
-      rows.push(row1);
-      rows.push(row2);
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-
-    // Merges
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } }, // Title
-      { s: { r: 4, c: 0 }, e: { r: 6, c: 0 } }, // TT
-      { s: { r: 4, c: 1 }, e: { r: 6, c: 1 } }, // Họ tên
-      { s: { r: 4, c: 2 }, e: { r: 4, c: 9 } }, // KẾT QUẢ SÀNG LỌC
-      { s: { r: 4, c: 10 }, e: { r: 4, c: 12 } }, // ĐÁNH GIÁ
-      { s: { r: 5, c: 2 }, e: { r: 5, c: 2 } }, // Giới (label)
-      { s: { r: 5, c: 3 }, e: { r: 5, c: 3 } }, // Tuổi (label)
-      { s: { r: 5, c: 4 }, e: { r: 5, c: 4 } }, // Gia đình (label)
-      { s: { r: 5, c: 5 }, e: { r: 5, c: 7 } }, // Chỉ số khối cơ thể (label)
-      { s: { r: 5, c: 8 }, e: { r: 5, c: 8 } }, // Vòng eo (label)
-      { s: { r: 5, c: 9 }, e: { r: 5, c: 9 } }, // Huyết áp (label)
-      { s: { r: 5, c: 10 }, e: { r: 6, c: 10 } }, // Tổng điểm
-      { s: { r: 5, c: 11 }, e: { r: 6, c: 11 } }, // Nguy cơ mắc ĐTĐ
-      { s: { r: 5, c: 12 }, e: { r: 6, c: 12 } }, // Nghi ngờ THA
-    ];
-
-    // Merges for data rows
-    const dataStartRow = 8; // Row 9
-    data.forEach((_, i) => {
-      const r = dataStartRow + (i * 2);
-      ws['!merges']?.push({ s: { r: r, c: 0 }, e: { r: r + 1, c: 0 } }); // TT
-      ws['!merges']?.push({ s: { r: r, c: 10 }, e: { r: r + 1, c: 10 } }); // Tổng điểm
-      ws['!merges']?.push({ s: { r: r, c: 11 }, e: { r: r + 1, c: 11 } }); // Nguy cơ ĐTD
-      ws['!merges']?.push({ s: { r: r, c: 12 }, e: { r: r + 1, c: 12 } }); // Nghi ngờ THA
-    });
-
-    // Column widths
-    ws['!cols'] = [
-      { wch: 5 },  // TT
-      { wch: 25 }, // Họ tên
-      { wch: 10 }, // Giới
-      { wch: 8 },  // Tuổi
-      { wch: 15 }, // Gia đình
-      { wch: 6 },  // CC
-      { wch: 6 },  // CN
-      { wch: 8 },  // BMI
-      { wch: 15 }, // Vòng eo
-      { wch: 12 }, // Huyết áp
-      { wch: 10 }, // Tổng điểm
-      { wch: 15 }, // Nguy cơ ĐTD
-      { wch: 15 }, // Nghi ngờ THA
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws, "Sàng lọc THA & ĐTD");
-    XLSX.writeFile(wb, `${fileName}_SangLoc_Mau.xlsx`);
-  };
-
-  const exportCOPDToExcel = (data: any[], fileName: string) => {
-    const wb = XLSX.utils.book_new();
-    
-    // Header rows
-    const header = [
-      ["DANH SÁCH SÀNG LỌC NGHI NGỜ HEN, COPD"],
-      [],
-      ["Khóm/ấp:", "", "Phường/xã:", "", "", "", "", "CTV:", "", "", "", "", "", ""],
-      ["Thành phố:", "", "Tỉnh:", "", "", "", "", "", "", "", "", "", "", ""],
-      [
-        "TT", 
-        "Họ và tên", 
-        "KẾT QUẢ SÀNG LỌC", "", "", "", "", "", "", "", "", "", "", "", "", 
-        "ĐÁNH GIÁ"
-      ],
-      [
-        "", 
-        "", 
-        "Giới tính", 
-        "Tuổi", 
-        "Câu hỏi tầm soát Hen (GINA)", "", "", "", "", "", "", 
-        "Câu hỏi tầm soát bệnh Phổi", "", "", "", "", 
-        "Nguy cơ mắc HEN", 
-        "Nguy cơ mắc COPD"
-      ],
-      [
-        "", 
-        "", 
-        "", 
-        "", 
-        "1", "2", "3", "4", "5", "6", "7", 
-        "1", "2", "3", "4", "5", 
-        "≥2 câu = có; <2 câu = ko", 
-        "≥3 câu = có; <3 câu = ko"
-      ]
-    ];
-
-    const rows: any[] = [...header];
-
-    data.forEach((item, index) => {
-      // Row 1: Values
-      const row1 = [
-        index + 1,
-        `Tên: ${item['Họ tên (*)']}`,
-        item['Giới tính (*)'],
-        item['Tuổi'],
-        item['Hen-C1'] === 'Có' ? 'X' : '',
-        item['Hen-C2'] === 'Có' ? 'X' : '',
-        item['Hen-C3'] === 'Có' ? 'X' : '',
-        item['Hen-C4'] === 'Có' ? 'X' : '',
-        item['Hen-C5'] === 'Có' ? 'X' : '',
-        item['Hen-C6'] === 'Có' ? 'X' : '',
-        item['Hen-C7'] === 'Có' ? 'X' : '',
-        item['COPD-C1'] === 'Có' ? 'X' : '',
-        item['COPD-C2'] === 'Có' ? 'X' : '',
-        item['COPD-C3'] === 'Có' ? 'X' : '',
-        item['COPD-C4'] === 'Có' ? 'X' : '',
-        item['COPD-C5'] === 'Có' ? 'X' : '',
-        item['Nghi ngờ Hen'],
-        item['Nghi ngờ COPD']
-      ];
-      
-      // Row 2: Points label
-      const row2 = [
-        "",
-        "Điểm nguy cơ",
-        "",
-        "",
-        "", "", "", "", "", "", "",
-        "", "", "", "", "",
-        "",
-        ""
-      ];
-      
-      rows.push(row1);
-      rows.push(row2);
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-
-    // Merges
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 17 } }, // Title
-      { s: { r: 4, c: 0 }, e: { r: 6, c: 0 } }, // TT
-      { s: { r: 4, c: 1 }, e: { r: 6, c: 1 } }, // Họ tên
-      { s: { r: 4, c: 2 }, e: { r: 4, c: 15 } }, // KẾT QUẢ SÀNG LỌC
-      { s: { r: 4, c: 16 }, e: { r: 4, c: 17 } }, // ĐÁNH GIÁ
-      { s: { r: 5, c: 2 }, e: { r: 6, c: 2 } }, // Giới tính
-      { s: { r: 5, c: 3 }, e: { r: 6, c: 3 } }, // Tuổi
-      { s: { r: 5, c: 4 }, e: { r: 5, c: 10 } }, // Hen (label)
-      { s: { r: 5, c: 11 }, e: { r: 5, c: 15 } }, // COPD (label)
-      { s: { r: 5, c: 16 }, e: { r: 5, c: 16 } }, // Nguy cơ HEN (label)
-      { s: { r: 5, c: 17 }, e: { r: 5, c: 17 } }, // Nguy cơ COPD (label)
-    ];
-
-    // Merges for data rows
-    const dataStartRow = 7; 
-    data.forEach((_, i) => {
-      const r = dataStartRow + (i * 2);
-      ws['!merges']?.push({ s: { r: r, c: 0 }, e: { r: r + 1, c: 0 } }); // TT
-      ws['!merges']?.push({ s: { r: r, c: 16 }, e: { r: r + 1, c: 16 } }); // Nguy cơ HEN
-      ws['!merges']?.push({ s: { r: r, c: 17 }, e: { r: r + 1, c: 17 } }); // Nguy cơ COPD
-    });
-
-    // Column widths
-    ws['!cols'] = [
-      { wch: 5 },  // TT
-      { wch: 30 }, // Họ tên
-      { wch: 10 }, // Giới
-      { wch: 8 },  // Tuổi
-      { wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 4 }, // Hen
-      { wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 4 }, // COPD
-      { wch: 15 }, // Nguy cơ HEN
-      { wch: 15 }, // Nguy cơ COPD
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws, "Sàng lọc COPD & Hen");
-    XLSX.writeFile(wb, `${fileName}_COPD_Mau.xlsx`);
   };
 
   const handleReset = () => {
@@ -1224,7 +1285,7 @@ function MainApp() {
   if (authLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <img src="https://hdd.io.vn/img/bmassloadings.png" alt="Loading" className="h-20 w-auto object-contain mb-4 animate-pulse" />
+        <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Loading" className="h-20 w-auto object-contain mb-4 animate-pulse" />
         <div className="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
           <div className="h-full bg-blue-600 animate-progress"></div>
         </div>
@@ -1246,28 +1307,34 @@ function MainApp() {
               Đăng nhập
             </button>
             <div className="flex items-center gap-3">
-              <img src="https://hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-8 w-auto" />
+              <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-8 w-auto" />
               <span className="font-black text-slate-900 tracking-tight hidden sm:inline">BMASS HEALTH</span>
             </div>
           </div>
         </header>
 
-        <main className="pt-24 pb-12 px-4">
+        <main className="pt-32 pb-12 px-4 flex flex-col items-center justify-center min-h-[80vh]">
           <div className="max-w-4xl mx-auto text-center mb-12">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight mb-4">
-                Sàng lọc sức khỏe <span className="text-blue-600">chủ động</span>
+              <h1 className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tight mb-6">
+                Hệ thống Quản lý <br/><span className="text-blue-600">Dữ liệu Y tế</span>
               </h1>
-              <p className="text-lg text-slate-500 font-medium max-w-2xl mx-auto">
-                Thực hiện đánh giá nguy cơ mắc các bệnh không lây nhiễm (Tiểu đường, Huyết áp, COPD, Hen) hoàn toàn trực tuyến và nhận kết quả ngay lập tức.
+              <p className="text-xl text-slate-500 font-medium max-w-2xl mx-auto mb-10">
+                Chuyên sâu về chuyển đổi, chuẩn hóa và quản lý dữ liệu danh mục kỹ thuật, thuốc và vật tư y tế.
               </p>
+              
+              <button 
+                onClick={() => setShowLogin(true)}
+                className="px-10 py-5 bg-blue-600 text-white rounded-2xl text-lg font-black hover:bg-blue-700 transition-all shadow-2xl shadow-blue-500/20 active:scale-95 flex items-center gap-3 mx-auto"
+              >
+                <LogIn size={24} />
+                BẮT ĐẦU SỬ DỤNG
+              </button>
             </motion.div>
           </div>
-
-          <OnlineScreeningForm />
         </main>
 
         {/* Login Modal */}
@@ -1321,6 +1388,142 @@ function MainApp() {
     );
   }
 
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-[#050608] flex items-center justify-center p-4 sm:p-6 overflow-hidden relative font-sans text-slate-200">
+        {/* Advanced Architectural Background */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {/* Subtle Dynamic Gradients */}
+          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_40%,#131a2b_0%,#050608_100%)] opacity-80" />
+          
+          {/* Refined Grid Pattern */}
+          <div className="absolute inset-0" style={{ 
+            backgroundImage: 'linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)', 
+            backgroundSize: '40px 40px',
+            maskImage: 'radial-gradient(ellipse at 50% 50%, black 20%, transparent 80%)'
+          }} />
+
+          {/* Floating Security Orbs */}
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.2, 1],
+              opacity: [0.05, 0.1, 0.05],
+              x: [-20, 20, -20],
+              y: [-20, 20, -20]
+            }}
+            transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+            className="absolute top-1/4 left-1/3 w-[50vh] h-[50vh] bg-blue-500/20 rounded-full blur-[120px]"
+          />
+        </div>
+
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98, y: 15 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="relative w-full max-w-[540px] z-10"
+        >
+          {/* Main Security Frame */}
+          <div className="relative bg-slate-950/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)]">
+            
+            {/* Top Status Bar */}
+            <div className="h-1 bg-gradient-to-r from-transparent via-amber-500/50 to-transparent w-full absolute top-0" />
+            
+            <div className="px-6 py-10 sm:px-14 sm:py-16 flex flex-col items-center">
+              
+              {/* Refined Authorized Tag */}
+              <div className="mb-10 flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                <span className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em]">Security Protocol 403-B</span>
+              </div>
+
+              {/* Core Security Visual */}
+              <div className="relative mb-12 group">
+                <div className="absolute inset-[-20px] rounded-full border border-white/5 animate-[spin_20s_linear_infinite]" />
+                <div className="absolute inset-[-40px] rounded-full border border-white/[0.02] animate-[spin_30s_linear_infinite_reverse]" />
+                
+                <div className="relative w-24 h-24 sm:w-32 sm:h-32 bg-slate-900 border border-white/10 rounded-full flex items-center justify-center overflow-hidden shadow-inner">
+                  {/* Digital Scan Layer */}
+                  <div className="absolute inset-0 bg-[linear-gradient(transparent_0%,rgba(245,158,11,0.05)_50%,transparent_100%)] bg-[length:100%_200%] animate-[scan_4s_ease-in-out_infinite]" />
+                  
+                  {/* Subtle Radar Pulse */}
+                  <div className="absolute inset-0 border-2 border-amber-500/10 rounded-full animate-ping opacity-20" />
+                  
+                  <ShieldAlert size={40} className="text-amber-500 sm:size-48 relative z-10 drop-shadow-[0_0_12px_rgba(245,158,11,0.3)]" strokeWidth={1} />
+                </div>
+              </div>
+
+              {/* Authoritative Information Unit */}
+              <div className="text-center space-y-3 mb-10 w-full">
+                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight uppercase">
+                  Xác Thực <span className="text-slate-500">Bất Thành</span>
+                </h2>
+                <div className="flex items-center justify-center gap-3">
+                  <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-white/10" />
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Unauthorized Access Attempt</p>
+                  <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-white/10" />
+                </div>
+              </div>
+
+              {/* Structured Clearance Report */}
+              <div className="w-full bg-slate-900/50 rounded-2xl border border-white/5 p-6 mb-10 text-left">
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Cấp độ bảo mật</label>
+                    <p className="text-xs font-bold text-slate-200">RESTRICTED_ACCESS</p>
+                  </div>
+                  <div className="text-right">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Mã tham chiếu</label>
+                    <p className="text-xs font-mono text-amber-500">AUTH-FAIL-LOG-X01</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-4 border-t border-white/5">
+                  <h3 className="text-sm font-black text-slate-200 tracking-tight flex items-center gap-2 italic uppercase">
+                    <Lock size={12} className="text-amber-500" />
+                    Không phận sự miễn vào
+                  </h3>
+                  <p className="text-xs leading-relaxed text-slate-400 font-medium">
+                    Hệ thống đã nhận diện nỗ lực truy cập từ địa chỉ IP của bạn. Mọi hành vi xâm nhập trái phép đều được ghi nhận vào cơ sở dữ liệu an ninh quốc gia. Vui lòng liên hệ cán bộ Ban Quản trị để được xác thực danh tính.
+                  </p>
+                </div>
+              </div>
+
+              {/* Verified Return Action */}
+              <button 
+                onClick={logout} 
+                className="group relative w-full overflow-hidden rounded-[1.25rem] bg-white text-black py-4 font-black text-sm tracking-tight transition-all active:scale-[0.98] hover:bg-slate-200"
+              >
+                <div className="relative z-10 flex items-center justify-center gap-3">
+                  <LogOut size={18} />
+                  XÁC NHẬN RỜI HỆ THỐNG
+                </div>
+              </button>
+
+              {/* Platform Footer Branding */}
+              <div className="mt-12 w-full flex items-center justify-between opacity-20 grayscale">
+                <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="BMASS" className="h-6 w-auto" />
+                <div className="text-[9px] font-black uppercase tracking-[0.3em] flex items-center gap-3">
+                  <span>Secured by BMASS Cloud</span>
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                  <span>2024</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          
+          {/* Subtle Architectural Sub-text */}
+          <div className="mt-10 text-center opacity-30">
+            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white">Advanced Security Layer Enforcement</p>
+          </div>
+        </motion.div>
+        
+        {/* High-end Visual Finish */}
+        <div className="fixed inset-0 pointer-events-none opacity-[0.04] mix-blend-overlay" style={{ backgroundImage: 'url("https://grainy-gradients.vercel.app/noise.svg")' }} />
+      </div>
+    );
+  }
+
   if (showAdmin && profile?.role === 'admin') {
     return (
       <div className="min-h-screen bg-gray-50 p-8 font-sans">
@@ -1349,7 +1552,7 @@ function MainApp() {
               <Menu size={24} />
             </button>
             <div className="p-2 bg-blue-50 rounded-xl hidden sm:block">
-              <img src="https://hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-10 w-auto object-contain" />
+              <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-10 w-auto object-contain" />
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900">Bmass Data Converter</h1>
@@ -1397,42 +1600,54 @@ function MainApp() {
                 animate={{ x: 0 }}
                 exit={{ x: '-100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed top-0 left-0 bottom-0 w-72 bg-white z-50 shadow-2xl flex flex-col"
+                className="fixed top-0 left-0 bottom-0 w-64 bg-white z-50 shadow-2xl flex flex-col"
               >
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <img src="https://hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-8 w-auto" />
-                    <span className="font-black text-slate-900 tracking-tight">BMASS</span>
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-6 w-auto" />
+                    <span className="font-black text-slate-900 tracking-tight text-sm">BMASS</span>
                   </div>
                   <button 
                     onClick={() => setShowSidebar(false)}
-                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
                   >
-                    <X size={20} />
+                    <X size={16} />
                   </button>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
+                <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
                   {isAdmin && (
                     <button 
                       onClick={() => {
                         setShowSidebar(false);
                         setShowAdmin(true);
                       }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all font-bold text-sm"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all font-bold text-xs"
                     >
-                      <Shield size={20} />
-                      Quản trị hệ thống
+                      <Shield size={16} />
+                       Quản trị hệ thống
                     </button>
                   )}
+
+                  <button 
+                    onClick={() => {
+                      setShowSidebar(false);
+                      setShowAdvancedConverter(true);
+                      setShowAdmin(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all font-bold text-xs"
+                  >
+                    <RefreshCcw size={16} />
+                    Chuyển đổi nâng cao
+                  </button>
                 </div>
                 
-                <div className="p-4 border-t border-slate-100">
+                <div className="p-3 border-t border-slate-100">
                   <button 
                     onClick={logout}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-all font-bold text-sm"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-red-600 hover:bg-red-50 rounded-lg transition-all font-bold text-xs"
                   >
-                    <LogOut size={20} />
+                    <LogOut size={16} />
                     Đăng xuất
                   </button>
                 </div>
@@ -1447,25 +1662,34 @@ function MainApp() {
             <div className="lg:col-span-4">
               {/* Upload Card */}
               <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
-                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <Upload size={18} className="text-blue-600" />
+                <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                    <Upload size={16} className="text-blue-600" />
                     Tải lên dữ liệu
                   </h3>
-                  {inputData.length > 0 && (
+                  <div className="flex items-center gap-3">
                     <button 
-                      onClick={handleReset}
-                      className="text-xs font-bold text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors"
+                      onClick={handleDownloadSample}
+                      className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors"
                     >
-                      <Trash2 size={14} />
-                      Làm mới
+                      <Download size={14} />
+                      Tải file mẫu
                     </button>
-                  )}
+                    {inputData.length > 0 && (
+                      <button 
+                        onClick={handleReset}
+                        className="text-[11px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors"
+                      >
+                        <Trash2 size={12} />
+                        Làm mới
+                      </button>
+                    )}
+                  </div>
                 </div>
                 
-                <div className="p-4 flex-1 flex flex-col justify-center">
+                <div className="p-3 flex-1 flex flex-col justify-center gap-3">
                   <div 
-                    className={`relative group border-2 border-dashed rounded-2xl p-4 text-center transition-all duration-300 cursor-pointer
+                    className={`relative group border-2 border-dashed rounded-xl p-3 text-center transition-all duration-300 cursor-pointer
                       ${isDragging ? 'border-blue-500 bg-blue-50/50 scale-[0.98]' : 'border-slate-200 hover:border-blue-400 hover:bg-slate-50/50'}`}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -1480,24 +1704,24 @@ function MainApp() {
                       className="hidden" 
                     />
                     
-                    <div className="flex flex-col items-center space-y-3">
-                      <div className={`p-4 rounded-2xl transition-colors ${isDragging ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
-                        <FileSpreadsheet size={32} />
+                    <div className="flex flex-col items-center space-y-2">
+                       <div className={`p-3 rounded-xl transition-colors ${isDragging ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
+                        <FileSpreadsheet size={24} />
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-slate-700">
+                        <div className="text-xs font-bold text-slate-700">
                           {fileName ? (
                             <div className="space-y-1">
                               <span className="text-blue-600 truncate max-w-[200px] block">{fileName}</span>
                               {inputData.length > 0 && (
-                                <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">
-                                  {inputData.length.toLocaleString()} dòng dữ liệu
+                                <span className="text-[9px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">
+                                  {inputData.length.toLocaleString()} dòng
                                 </span>
                               )}
                             </div>
                           ) : 'Chọn file Excel hoặc CSV'}
                         </div>
-                        <p className="text-xs text-slate-400 mt-1">Kéo thả file vào vùng này</p>
+                        <p className="text-[10px] text-slate-400 mt-1">Kéo thả file vào vùng này</p>
                       </div>
                     </div>
                   </div>
@@ -1601,226 +1825,250 @@ function MainApp() {
           {inputData.length > 0 && (
             <div className="space-y-6">
                 {/* Filters Card */}
-                <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative">
-                  <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                      <Filter size={18} className="text-blue-600" />
-                      Bộ lọc dữ liệu
-                    </h3>
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      <Info size={12} />
-                      Cấu hình xuất
+                <section className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden relative">
+                  <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200">
+                        <Filter size={20} />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-slate-900 uppercase tracking-tight">Cấu hình Bộ lọc</h3>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Tinh chỉnh dữ liệu đầu ra</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">
+                        <Database size={12} className="text-blue-600" />
+                        {inputData.length.toLocaleString()} dòng nạp hồ sơ
+                      </div>
                     </div>
                   </div>
 
-                  <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {/* Date Range */}
+                  <div className="p-8 sm:p-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                      {/* 1. Date Range */}
                       <div className="space-y-4">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <Calendar size={14} />
-                          Khoảng thời gian khám
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                          <Calendar size={14} className="text-blue-600" />
+                          KHOẢNG THỜI GIAN
                         </label>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-500 ml-1 flex items-center gap-1">
-                              <span className="w-1 h-1 bg-blue-500 rounded-full"></span>
-                              Từ ngày
-                            </label>
-                            <div className="relative group">
-                              <input 
-                                type="date" 
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-3 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer group-hover:bg-white" 
-                                value={startDate} 
-                                onChange={e => setStartDate(e.target.value)} 
-                                disabled={false}
-                              />
-                              <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-hover:text-blue-400 transition-colors" size={16} />
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-500 ml-1 flex items-center gap-1">
-                              <span className="w-1 h-1 bg-blue-500 rounded-full"></span>
-                              Đến ngày
-                            </label>
-                            <div className="relative group">
-                              <input 
-                                type="date" 
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-3 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer group-hover:bg-white" 
-                                value={endDate} 
-                                onChange={e => setEndDate(e.target.value)} 
-                                disabled={false}
-                              />
-                              <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-hover:text-blue-400 transition-colors" size={16} />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Gender & Admin Unit */}
-                      <div className="space-y-6">
-                        <div className="space-y-4">
-                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                            <Users size={14} />
-                            Định dạng giới tính
-                          </label>
-                          <div className="flex p-1 bg-slate-100 rounded-xl">
-                            <button 
-                              onClick={() => handleGenderFormatChange('text')}
-                              disabled={false}
-                              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${genderFormat === 'text' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                            >
-                              Nam / Nữ
-                            </button>
-                            <button 
-                              onClick={() => handleGenderFormatChange('number')}
-                              disabled={false}
-                              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${genderFormat === 'number' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                            >
-                              01 / 02
-                            </button>
-                          </div>
-                        </div>
-
-
-                      </div>
-
-                      {/* Admin Unit Code */}
-                      <div className="space-y-4">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <MapPin size={14} />
-                          Mã đơn vị hành chính (*)
-                        </label>
-                        <div className="flex gap-2">
-                          <div className="relative flex-1">
+                        <div className="grid grid-cols-1 gap-3">
+                          <div className="relative group">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase pointer-events-none group-focus-within:text-blue-500 transition-colors">TỪ</div>
                             <input 
-                              type="text"
-                              value={adminUnitCode}
-                              onChange={(e) => setAdminUnitCode(e.target.value)}
-                              onKeyDown={(e) => e.key === 'Enter' && handleApplyAdminUnit()}
-                              placeholder="Nhập mã xã/phường..."
-                              disabled={false}
-                              className={`w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all`}
+                              type="date" 
+                              className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-3 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:bg-white focus:border-blue-500 outline-none transition-all cursor-pointer shadow-sm" 
+                              value={startDate} 
+                              onChange={e => setStartDate(e.target.value)} 
                             />
-                            <button 
-                              onClick={() => setShowAdminUnit(true)}
-                              disabled={false}
-                              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-blue-600 transition-colors`}
-                            >
-                              <ChevronRight size={18} />
-                            </button>
                           </div>
+                          <div className="relative group">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase pointer-events-none group-focus-within:text-blue-500 transition-colors">ĐẾN</div>
+                            <input 
+                              type="date" 
+                              className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-3 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:bg-white focus:border-blue-500 outline-none transition-all cursor-pointer shadow-sm" 
+                              value={endDate} 
+                              onChange={e => setEndDate(e.target.value)} 
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 2. Gender Format */}
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                          <Users size={14} className="text-blue-600" />
+                          ĐỊNH DẠNG GIỚI TÍNH
+                        </label>
+                        <div className="flex p-1.5 bg-slate-100 rounded-2xl">
                           <button 
-                            onClick={() => handleApplyAdminUnit()}
-                            disabled={false}
-                            className={`px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all active:scale-95`}
+                            onClick={() => handleGenderFormatChange('text')}
+                            className={`flex-1 py-3 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${genderFormat === 'text' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
                           >
-                            Xác nhận
+                            Nam / Nữ
+                          </button>
+                          <button 
+                            onClick={() => handleGenderFormatChange('number')}
+                            className={`flex-1 py-3 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${genderFormat === 'number' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            01 / 02
                           </button>
                         </div>
                       </div>
 
-                      {/* Blood Sugar Config */}
+                      {/* 3. Admin Unit */}
                       <div className="space-y-4">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <Database size={14} />
-                          Cấu hình nâng cao
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                          <MapPin size={14} className="text-blue-600" />
+                          ĐƠN VỊ HÀNH CHÍNH
                         </label>
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-1 flex gap-1 shadow-sm">
+                          <input 
+                            type="text"
+                            value={adminUnitCode}
+                            onChange={(e) => setAdminUnitCode(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleApplyAdminUnit()}
+                            placeholder="Mã xã/phường..."
+                            className="flex-1 bg-transparent px-4 py-2.5 text-sm font-bold text-slate-700 outline-none placeholder:text-slate-300"
+                          />
+                          <button 
+                            onClick={() => handleApplyAdminUnit()}
+                            className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200"
+                          >
+                            XÁC NHẬN
+                          </button>
+                        </div>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest italic flex items-center gap-1 mt-1">
+                          <Info size={10} /> (*) Bắt buộc để xác định đơn vị
+                        </p>
+                      </div>
+
+                      {/* 4. Advanced Status View */}
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                          <Settings size={14} className="text-blue-600" />
+                          TRẠNG THÁI NÂNG CAO
+                        </label>
+                        <div className={`p-4 rounded-2xl border flex items-center gap-3 transition-colors ${hasAdvancedAccess ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
+                          <div className={`p-2 rounded-xl scale-90 ${hasAdvancedAccess ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-200 text-slate-400'}`}>
+                            <ShieldCheck size={18} />
+                          </div>
+                          <div>
+                            <p className={`text-[10px] font-black uppercase tracking-widest ${hasAdvancedAccess ? 'text-indigo-900' : 'text-slate-400'}`}>
+                              Quyền: {hasAdvancedAccess ? 'Admin' : 'Hạn chế'}
+                            </p>
+                            <p className="text-[9px] font-bold text-slate-400 mt-0.5 whitespace-nowrap">
+                              {hasAdvancedAccess ? 'Cho phép truy cập cấu hình AI' : 'Vui lòng nâng cấp tài khoản'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Blood Sugar Config */}
+                      <div className="space-y-6 pt-10 border-t border-slate-100">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                            <Settings size={14} className="text-blue-600" />
+                            Cấu hình Thuật toán Nâng cao
+                          </label>
+                          {hasAdvancedAccess && (
+                            <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 text-[9px] font-black uppercase tracking-widest">
+                              <ShieldCheck size={10} />
+                              Admin Verified
+                            </div>
+                          )}
+                        </div>
+
                         {hasAdvancedAccess ? (
-                          <div className="flex flex-wrap gap-3">
-                            <button 
-                              onClick={() => setRemoveDuplicates(!removeDuplicates)}
-                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
-                                removeDuplicates ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-50 text-slate-500 border-slate-100'
-                              }`}
-                            >
-                              {removeDuplicates ? <Check size={14} /> : <div className="w-3.5" />}
-                              Lọc trùng (10 số cuối BHYT)
-                            </button>
-
-                            {!showBsConfig ? (
-                              <button 
-                                onClick={() => setShowBsConfig(true)} 
-                                className="px-4 py-2.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all"
-                              >
-                                Tự động điền kết quả (Đường huyết)
-                              </button>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <input 
-                                  type="number" 
-                                  placeholder="Min" 
-                                  className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none" 
-                                  value={bsMin} 
-                                  onChange={e => setBsMin(e.target.value)} 
+                          <div className="space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              <Toggle 
+                                enabled={removeDuplicates}
+                                onChange={setRemoveDuplicates}
+                                label="Loại bỏ Trùng lặp"
+                                description="Tự động xóa hồ sơ trùng BHYT"
+                                icon={Users}
+                              />
+                              
+                              <div className="flex flex-col gap-2">
+                                <Toggle 
+                                  enabled={showBsConfig}
+                                  onChange={setShowBsConfig}
+                                  label="Ngẫu nhiên Đường huyết"
+                                  description="Tự động điền theo chỉ số y khoa"
+                                  icon={Droplet}
                                 />
-                                <span className="text-slate-300">-</span>
-                                <input 
-                                  type="number" 
-                                  placeholder="Max" 
-                                  className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none" 
-                                  value={bsMax} 
-                                  onChange={e => setBsMax(e.target.value)} 
-                                />
-                                <button 
-                                  onClick={handleApplyBloodSugar} 
-                                  className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all"
-                                >
-                                  <CheckCircle size={16} />
-                                </button>
+                                {showBsConfig && (
+                                  <motion.div 
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center gap-3 overflow-hidden"
+                                  >
+                                    <div className="flex-1 grid grid-cols-2 gap-2">
+                                      <input 
+                                        type="number" 
+                                        placeholder="Min" 
+                                        className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                        value={bsMin} 
+                                        onChange={e => setBsMin(e.target.value)} 
+                                      />
+                                      <input 
+                                        type="number" 
+                                        placeholder="Max" 
+                                        className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                        value={bsMax} 
+                                        onChange={e => setBsMax(e.target.value)} 
+                                      />
+                                    </div>
+                                    <button 
+                                      onClick={handleApplyBloodSugar} 
+                                      className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                                    >
+                                      <CheckCircle size={18} />
+                                    </button>
+                                  </motion.div>
+                                )}
                               </div>
-                            )}
-                            
-                            <button 
-                              onClick={() => setRandomFamilyHistory(!randomFamilyHistory)}
-                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
-                                randomFamilyHistory ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
-                              }`}
-                            >
-                              {randomFamilyHistory ? <Check size={14} /> : <div className="w-3.5" />}
-                              Ngẫu nhiên tiền sử gia đình
-                            </button>
 
-                            <button 
-                              onClick={() => setRandomHeightWeight(!randomHeightWeight)}
-                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
-                                randomHeightWeight ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
-                              }`}
-                            >
-                              {randomHeightWeight ? <Check size={14} /> : <div className="w-3.5" />}
-                              Ngẫu nhiên Chiều cao/Cân nặng
-                            </button>
+                              <Toggle 
+                                enabled={randomFamilyHistory}
+                                onChange={setRandomFamilyHistory}
+                                label="Ngẫu nhiên Tiền sử"
+                                description="Tạo dữ liệu gia đình mắc ĐTD"
+                                icon={ActivityIcon}
+                              />
+                              <Toggle 
+                                enabled={randomHeightWeight}
+                                onChange={setRandomHeightWeight}
+                                label="Ngẫu nhiên BMI"
+                                description="Cân đối Chiều cao/Cân nặng chuẩn"
+                                icon={LayoutGrid}
+                              />
+                              <Toggle 
+                                enabled={randomBP}
+                                onChange={setRandomBP}
+                                label="Ngẫu nhiên Huyết áp"
+                                description="Gán chỉ số mặc định (120/80)"
+                                icon={ActivityIcon}
+                              />
+                              <Toggle 
+                                enabled={randomCOPD}
+                                onChange={setRandomCOPD}
+                                label="Sàng lọc COPD/Hen"
+                                description="Điền triệu chứng theo độ tuổi"
+                                icon={Wind}
+                              />
+                            </div>
 
-                            <button 
-                              onClick={() => setRandomBP(!randomBP)}
-                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
-                                randomBP ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
-                              }`}
-                            >
-                              {randomBP ? <Check size={14} /> : <div className="w-3.5" />}
-                              Huyết áp tự động (120/80)
-                            </button>
-
-                            <button 
-                              onClick={() => setRandomCOPD(!randomCOPD)}
-                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 ${
-                                randomCOPD ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
-                              }`}
-                            >
-                              {randomCOPD ? <Check size={14} /> : <div className="w-3.5" />}
-                              Ngẫu nhiên Sàng lọc COPD/Hen
-                            </button>
+                            <div className="bg-amber-50 rounded-[2rem] p-6 border border-amber-100 flex items-start gap-4">
+                              <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl">
+                                <AlertCircle size={24} />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-xs font-black text-amber-900 uppercase tracking-tighter">CẢNH BÁO TÁC ĐỘNG DỮ LIỆU</p>
+                                <p className="text-[10px] font-bold text-amber-700 leading-relaxed uppercase tracking-widest opacity-80">
+                                  Việc kích hoạt các thuật toán ngẫu nhiên sẽ can thiệp trực tiếp vào hồ sơ gốc. 
+                                  Hệ thống khuyến nghị chỉ sử dụng các tính năng này để bổ sung các trường dữ liệu còn trống trong giai đoạn thử nghiệm.
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         ) : (
-                          <div className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold text-slate-400 flex items-center justify-center gap-2">
-                            <Lock size={12} />
-                            CHỈ DÀNH CHO ADMIN
+                          <div className="p-10 bg-slate-50 border border-slate-100 border-dashed rounded-[2.5rem] text-center space-y-3">
+                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm">
+                              <Lock size={24} className="text-slate-300" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Quyền truy cập bị hạn chế</p>
+                              <p className="text-[10px] text-slate-300 font-bold uppercase tracking-[0.2em] mt-1">Vui lòng nâng cấp tài khoản Admin để mở khóa cấu hình AI</p>
+                            </div>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end gap-3">
+                    <div className="mt-10 pt-8 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3 px-2 pb-2">
                       <button 
                         onClick={handleClearFilters}
                         disabled={!startDate && !endDate && !adminUnitCode && !bsMin && !bsMax && genderFormat === 'text'}
@@ -1840,6 +2088,144 @@ function MainApp() {
                         <CheckCircle size={18} />
                         Áp dụng tất cả bộ lọc
                       </button>
+                    </div>
+                </section>
+
+                {/* Statistical Summary section */}
+                <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                  <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-blue-50/30">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <LayoutGrid size={18} className="text-blue-600" />
+                      Kết quả Sàng lọc & Chẩn đoán
+                    </h3>
+                    <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-blue-100 shadow-sm">
+                      Dữ liệu tóm tắt
+                    </div>
+                  </div>
+                  <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {/* Total Screening */}
+                    <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-2 bg-slate-200 text-slate-600 rounded-lg">
+                          <Users size={16} />
+                        </div>
+                        <span className="text-xs font-bold text-slate-600">Tổng Sàng lọc THA-ĐTĐ</span>
+                      </div>
+                      <div className="flex items-end justify-between">
+                        <div className="text-2xl font-black text-slate-900">
+                          {outputDataScreening.length}
+                        </div>
+                        <div className="text-[10px] font-medium text-slate-500 space-y-0.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nam:</span>
+                            <span className="font-black text-slate-700">{outputDataScreening.filter(r => (String(r['Giới tính (*)']).includes('Nam') || r['Giới tính (*)'] === '01')).length}</span>
+                          </div>
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nữ:</span>
+                            <span className="font-black text-slate-700">{outputDataScreening.filter(r => (String(r['Giới tính (*)']).includes('Nữ') || r['Giới tính (*)'] === '02')).length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Diabetes Risk */}
+                    <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                          <Droplet size={16} />
+                        </div>
+                        <span className="text-xs font-bold text-slate-600">Nguy cơ Đái tháo đường</span>
+                      </div>
+                      <div className="flex items-end justify-between">
+                        <div className="text-2xl font-black text-emerald-600">
+                          {outputDataScreening.filter(r => r['Nguy cơ Đái tháo đường'] === 'Có').length}
+                        </div>
+                        <div className="text-[10px] font-medium text-slate-500 space-y-0.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nam:</span>
+                            <span className="font-black text-slate-700">{outputDataScreening.filter(r => r['Nguy cơ Đái tháo đường'] === 'Có' && (String(r['Giới tính (*)']).includes('Nam') || r['Giới tính (*)'] === '01')).length}</span>
+                          </div>
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nữ:</span>
+                            <span className="font-black text-slate-700">{outputDataScreening.filter(r => r['Nguy cơ Đái tháo đường'] === 'Có' && (String(r['Giới tính (*)']).includes('Nữ') || r['Giới tính (*)'] === '02')).length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hypertension Suspicion */}
+                    <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                          <Activity size={16} />
+                        </div>
+                        <span className="text-xs font-bold text-slate-600">Nghi ngờ Tăng huyết áp</span>
+                      </div>
+                      <div className="flex items-end justify-between">
+                        <div className="text-2xl font-black text-blue-600">
+                          {outputDataScreening.filter(r => r['Nghi ngờ Tăng huyết áp'] === 'Có').length}
+                        </div>
+                        <div className="text-[10px] font-medium text-slate-500 space-y-0.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nam:</span>
+                            <span className="font-black text-slate-700">{outputDataScreening.filter(r => r['Nghi ngờ Tăng huyết áp'] === 'Có' && (String(r['Giới tính (*)']).includes('Nam') || r['Giới tính (*)'] === '01')).length}</span>
+                          </div>
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nữ:</span>
+                            <span className="font-black text-slate-700">{outputDataScreening.filter(r => r['Nghi ngờ Tăng huyết áp'] === 'Có' && (String(r['Giới tính (*)']).includes('Nữ') || r['Giới tính (*)'] === '02')).length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Asthma Suspicion */}
+                    <div className="p-4 rounded-xl border border-violet-100 bg-violet-50/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-2 bg-violet-100 text-violet-600 rounded-lg">
+                          <Wind size={16} />
+                        </div>
+                        <span className="text-xs font-bold text-slate-600">Nghi ngờ Hen</span>
+                      </div>
+                      <div className="flex items-end justify-between">
+                        <div className="text-2xl font-black text-violet-600">
+                          {outputDataCOPD.filter(r => r['Nghi ngờ Hen'] === 'Có').length}
+                        </div>
+                        <div className="text-[10px] font-medium text-slate-500 space-y-0.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nam:</span>
+                            <span className="font-black text-slate-700">{outputDataCOPD.filter(r => r['Nghi ngờ Hen'] === 'Có' && (String(r['Giới tính (*)']).includes('Nam') || r['Giới tính (*)'] === '01')).length}</span>
+                          </div>
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nữ:</span>
+                            <span className="font-black text-slate-700">{outputDataCOPD.filter(r => r['Nghi ngờ Hen'] === 'Có' && (String(r['Giới tính (*)']).includes('Nữ') || r['Giới tính (*)'] === '02')).length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* COPD Suspicion */}
+                    <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                          <Shield size={16} />
+                        </div>
+                        <span className="text-xs font-bold text-slate-600">Nghi ngờ COPD</span>
+                      </div>
+                      <div className="flex items-end justify-between">
+                        <div className="text-2xl font-black text-indigo-600">
+                          {outputDataCOPD.filter(r => r['Nghi ngờ COPD'] === 'Có').length}
+                        </div>
+                        <div className="text-[10px] font-medium text-slate-500 space-y-0.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nam:</span>
+                            <span className="font-black text-slate-700">{outputDataCOPD.filter(r => r['Nghi ngờ COPD'] === 'Có' && (String(r['Giới tính (*)']).includes('Nam') || r['Giới tính (*)'] === '01')).length}</span>
+                          </div>
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Nữ:</span>
+                            <span className="font-black text-slate-700">{outputDataCOPD.filter(r => r['Nghi ngờ COPD'] === 'Có' && (String(r['Giới tính (*)']).includes('Nữ') || r['Giới tính (*)'] === '02')).length}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -1933,29 +2319,25 @@ function MainApp() {
                         </button>
                         <button 
                           onClick={() => setActiveTab('SCREENING')}
-                          disabled={!isAdmin && !isSubAdmin}
                           className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                            activeTab === 'SCREENING' ? 'bg-green-600 text-white shadow-md' : (!isAdmin && !isSubAdmin) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-slate-500 hover:text-slate-700'
+                            activeTab === 'SCREENING' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'
                           }`}
                         >
-                          <ShieldCheck size={14} />
-                          Sàng lọc THA & ĐTD
-                          {(!isAdmin && !isSubAdmin) && <Lock size={12} className="ml-1 opacity-50" />}
-                          <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'SCREENING' ? 'bg-white/20 text-white' : (!isAdmin && !isSubAdmin) ? 'bg-slate-100 text-slate-400' : 'bg-green-50 text-green-600'}`}>
+                          <Search size={14} />
+                          Sàng lọc THA & ĐTĐ
+                          <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'SCREENING' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-600'}`}>
                             {outputDataScreening.length}
                           </span>
                         </button>
                         <button 
                           onClick={() => setActiveTab('COPD')}
-                          disabled={!isAdmin && !isSubAdmin}
                           className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                            activeTab === 'COPD' ? 'bg-slate-600 text-white shadow-md' : (!isAdmin && !isSubAdmin) ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'text-slate-500 hover:text-slate-700'
+                            activeTab === 'COPD' ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'
                           }`}
                         >
-                          <Info size={14} />
+                          <Wind size={14} />
                           Sàng lọc COPD & Hen
-                          {(!isAdmin && !isSubAdmin) && <Lock size={12} className="ml-1 opacity-50" />}
-                          <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'COPD' ? 'bg-white/20 text-white' : (!isAdmin && !isSubAdmin) ? 'bg-slate-100 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
+                          <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'COPD' ? 'bg-white/20 text-white' : 'bg-violet-50 text-violet-600'}`}>
                             {outputDataCOPD.length}
                           </span>
                         </button>
@@ -1998,46 +2380,51 @@ function MainApp() {
                                 return (
                                   <tr key={rowIndex} className={`hover:bg-slate-50/50 transition-colors group ${isDuplicate ? 'bg-red-50/30' : ''}`}>
                                     {currentColumns.map((col, colIndex) => {
-                                      const isCheckable = activeTab === 'COPD' && (col.startsWith('Hen-C') || col.startsWith('COPD-C'));
+                                      const isCheckable = activeTab === 'COPD' && (col.startsWith('Hen-') || col.startsWith('COPD-'));
                                       
+                                      if (isCheckable) {
+                                        const isChecked = row[col] === 'Có';
+                                        return (
+                                          <td key={colIndex} className="px-4 py-3">
+                                            <button 
+                                              onClick={() => {
+                                                const newData = [...outputDataCOPD];
+                                                const itemIndex = outputDataCOPD.indexOf(row);
+                                                if (itemIndex > -1) {
+                                                  newData[itemIndex] = {
+                                                    ...row,
+                                                    [col]: isChecked ? 'Không' : 'Có'
+                                                  };
+                                                  
+                                                  // Recalculate suspected status
+                                                  const r = newData[itemIndex];
+                                                  const henCount = ['Hen-C1', 'Hen-C2', 'Hen-C3', 'Hen-C4', 'Hen-C5', 'Hen-C6', 'Hen-C7'].filter(k => r[k] === 'Có').length;
+                                                  r['Nghi ngờ Hen'] = henCount >= 2 ? 'Có' : 'Không';
+                                                  
+                                                  const copdCount = ['COPD-C1', 'COPD-C2', 'COPD-C3', 'COPD-C4', 'COPD-C5'].filter(k => r[k] === 'Có').length;
+                                                  r['Nghi ngờ COPD'] = copdCount >= 3 ? 'Có' : 'Không';
+                                                  
+                                                  setOutputDataCOPD(newData);
+                                                }
+                                              }}
+                                              className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold transition-all ${
+                                                isChecked ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                              }`}
+                                            >
+                                              {isChecked ? <CheckCircle2 size={12} /> : <div className="w-3 h-3 border border-slate-300 rounded-sm" />}
+                                              {isChecked ? 'CÓ' : 'KHÔNG'}
+                                            </button>
+                                          </td>
+                                        );
+                                      }
+
                                       return (
                                         <td key={colIndex} className={`px-4 py-3 text-xs font-medium whitespace-nowrap ${
-                                          isDuplicate ? 'text-red-600' :
-                                          (col === 'Nguy cơ Đái tháo đường' || col === 'Nghi ngờ Tăng huyết áp' || col === 'Nghi ngờ Hen' || col === 'Nghi ngờ COPD') && row[col] === 'Có' 
-                                            ? 'text-red-600 font-bold' 
-                                            : 'text-slate-600'
+                                          isDuplicate ? 'text-red-600' : 'text-slate-600'
                                         }`}>
-                                        {isCheckable && isAdmin ? (
-                                          <button 
-                                            onClick={() => {
-                                              const newData = [...outputDataCOPD];
-                                              const itemIndex = newData.findIndex(item => item['Họ tên (*)'] === row['Họ tên (*)'] && item['Năm sinh (*)'] === row['Năm sinh (*)']);
-                                              if (itemIndex !== -1) {
-                                                newData[itemIndex][col] = newData[itemIndex][col] === 'Có' ? 'Không' : 'Có';
-                                                
-                                                // Recalculate suspicion
-                                                const henCount = Array.from({ length: 7 }, (_, i) => newData[itemIndex][`Hen-C${i+1}`]).filter(a => a === 'Có').length;
-                                                const copdCount = Array.from({ length: 5 }, (_, i) => newData[itemIndex][`COPD-C${i+1}`]).filter(a => a === 'Có').length;
-                                                
-                                                newData[itemIndex]['Nghi ngờ Hen'] = henCount >= 2 ? 'Có' : 'Không';
-                                                newData[itemIndex]['Nghi ngờ COPD'] = copdCount >= 3 ? 'Có' : 'Không';
-                                                
-                                                setOutputDataCOPD(newData);
-                                              }
-                                            }}
-                                            className={`flex items-center gap-2 px-2 py-1 rounded border transition-all ${
-                                              isDuplicate ? 'bg-red-50 border-red-200 text-red-600' :
-                                              row[col] === 'Có' ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-slate-50 border-slate-200 text-slate-400'
-                                            }`}
-                                          >
-                                            {row[col] === 'Có' ? <CheckSquare size={14} /> : <Square size={14} />}
-                                            {row[col]}
-                                          </button>
-                                        ) : (
-                                          row[col] === undefined || row[col] === null || row[col] === '' ? <span className={`italic ${isDuplicate ? 'text-red-400' : 'text-slate-300'}`}>Không</span> : row[col]
-                                        )}
-                                      </td>
-                                    );
+                                          {row[col] === undefined || row[col] === null || row[col] === '' ? <span className={`italic ${isDuplicate ? 'text-red-400' : 'text-slate-300'}`}>Không</span> : row[col]}
+                                        </td>
+                                      );
                                   })}
                                 </tr>
                               );
@@ -2121,9 +2508,88 @@ function MainApp() {
                     </div>
                   </section>
                 )}
+
+                {/* Patient Management Stats Card */}
+                {patientStats.length > 0 && (
+                  <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-6">
+                    <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                          <Activity size={18} className="text-blue-600" />
+                          Quản lý danh sách đến khám tại trạm (2026)
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Tổng số người đến khám: <span className="font-bold text-blue-600">{patientStats.length}</span> người ({inputData.length} lượt khám).
+                        </p>
+                      </div>
+                      <button 
+                        onClick={exportPatientStats}
+                        className="px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-2"
+                      >
+                        <Download size={14} />
+                        Xuất danh sách quản lý
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto max-h-[400px] no-scrollbar">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-sm">
+                          <tr>
+                            <th className="px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-12 text-center">STT</th>
+                            <th className="px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Mã BN</th>
+                            <th className="px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Họ tên & Tuổi</th>
+                            <th className="px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Phân loại bệnh</th>
+                            <th className="px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Địa chỉ</th>
+                            <th className="px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Lượt khám (Năm nay / Tổng)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {patientStats.map((stat, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="px-3 py-3 text-xs font-medium text-slate-400 text-center">{idx + 1}</td>
+                              <td className="px-3 py-3 text-[11px] font-bold text-slate-700 font-mono">{stat.maBN}</td>
+                              <td className="px-3 py-3">
+                                <div className="text-xs font-bold text-slate-800">{stat.tenBN}</div>
+                                <div className="text-[10px] text-slate-500 mt-0.5 flex gap-1.5 items-center">
+                                  <span>{stat.gender}</span>
+                                  {stat.age > 0 && (
+                                    <>
+                                      <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                      <span>{stat.age}T</span>
+                                      <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-bold text-slate-500">{stat.ageGroup}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {stat.hasTHA && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-md text-[10px] font-bold">THA</span>}
+                                  {stat.hasDTD && <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-md text-[10px] font-bold">ĐTĐ</span>}
+                                  {!stat.hasTHA && !stat.hasDTD && <span className="text-slate-400 text-xs italic">Khác</span>}
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="text-xs text-slate-500 truncate max-w-[200px]" title={stat.diaChi}>{stat.diaChi || '-'}</div>
+                                <div className="text-[10px] font-mono text-slate-400 mt-0.5" title="Mã BHYT">{stat.bhyt}</div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 font-black text-xs flex items-center justify-center border border-emerald-100" title="Trong năm: 2026">{stat.countCurrentYear}</span>
+                                  <span className="text-slate-300">/</span>
+                                  <span className="text-xs font-bold text-slate-500" title="Tổng cộng">{stat.count}</span>
+                                </div>
+                                <div className="text-[9px] text-slate-400 mt-1 uppercase tracking-wider">Lần cuối: {stat.latestDateStr}</div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
             </div>
           )}
         </main>
+
       </div>
       {showAdminUnit && (
         <AdministrativeUnitModal 
@@ -2139,10 +2605,10 @@ function MainApp() {
         <DownloadOptionsModal 
           onConfirm={executeDownload} 
           onClose={() => setShowDownloadOptions(false)} 
-          hasAdvancedAccess={isAdmin || isSubAdmin}
         />
       )}
       {showAdmin && isAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+      {showAdvancedConverter && <div className="fixed inset-0 z-[100] bg-white overflow-y-auto p-4 md:p-8"><AdvancedConverter onBack={() => setShowAdvancedConverter(false)} /></div>}
     </div>
   );
 }

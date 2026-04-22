@@ -50,7 +50,7 @@ export default function Login() {
   return (
     <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full mx-auto">
       <div className="text-center mb-8">
-          <img src="https://hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-16 w-auto object-contain mx-auto mb-4" />
+          <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-16 w-auto object-contain mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900">Chào mừng trở lại</h2>
           <p className="text-gray-500">Đăng nhập để tiếp tục sử dụng hệ thống</p>
         </div>
