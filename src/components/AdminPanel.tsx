@@ -31,6 +31,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { AdvancedConverter } from './AdvancedConverter';
 import { 
   BarChart, 
   Bar, 
@@ -52,7 +53,7 @@ const YesNoBadge = ({ value }: { value: boolean }) => (
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [onlineScreenings, setOnlineScreenings] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'screenings' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'screenings' | 'settings' | 'converter'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [confirmModal, setConfirmModal] = useState<{
@@ -229,22 +230,22 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         'ĐTD thai kỳ': yesNo(s.gestationalDiabetes),
         'Dấu hiệu THA': yesNo(s.signHTN),
         'Dấu hiệu ĐTD': yesNo(s.signDiabetes),
-        'Dấu hiệu Ung thư': yesNo(s.signCancer),
-        'COPD-C1 (Ho)': yesNo(s.copd_q1),
-        'COPD-C2 (Đờm)': yesNo(s.copd_q2),
-        'COPD-C3 (Khó thở)': yesNo(s.copd_q3),
+        'Dấu hiệu Ung thư': yesNo(s.signCancer_sores || s.signCancer_lump || s.signCancer_bleeding || s.signCancer_swallow || s.signCancer_cough),
+        'COPD-C1 (Ho)': yesNo(s.copd_cough),
+        'COPD-C2 (Đờm)': yesNo(s.copd_phlegm),
+        'COPD-C3 (Khó thở)': yesNo(s.copd_dyspnea),
         'COPD-C4 (>40 tuổi)': yesNo(s.age >= 40),
-        'COPD-C5 (Hút thuốc)': yesNo(s.copd_q5),
-        'Điểm COPD': s.copdCount,
+        'COPD-C5 (Hút thuốc)': yesNo(s.smoking || s.formerSmoker),
+        'Điểm COPD': s.copdPositiveCount || s.copdCount,
         'Kết luận COPD': copdConclusion,
-        'Hen-C1': yesNo(s.asthma_q1),
-        'Hen-C2': yesNo(s.asthma_q2),
-        'Hen-C3': yesNo(s.asthma_q3),
-        'Hen-C4': yesNo(s.asthma_q4),
-        'Hen-C5': yesNo(s.asthma_q5),
-        'Hen-C6': yesNo(s.asthma_q6),
-        'Hen-C7': yesNo(s.asthma_q7),
-        'Điểm Hen': s.asthmaCount,
+        'Hen-C1': yesNo(s.asthma_wheeze),
+        'Hen-C2': yesNo(s.asthma_night_breathless),
+        'Hen-C3': yesNo(s.asthma_night_cough),
+        'Hen-C4': yesNo(s.asthma_tight_chest),
+        'Hen-C5': yesNo(s.asthma_exercise_breathless),
+        'Hen-C6': yesNo(s.asthma_rest_breathless),
+        'Hen-C7': yesNo(s.asthma_work_related),
+        'Điểm Hen': s.asthmaPositiveCount || s.asthmaCount,
         'Kết luận Hen': asthmaConclusion,
         'Điểm ĐTD': s.diabetesRiskScore,
         'Kết luận ĐTD': dtdConclusion,
@@ -342,6 +343,15 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               <Settings size={18} />
               Cài đặt hệ thống
             </button>
+            <div className="pt-4 mt-4 border-t border-slate-50">
+              <button 
+                onClick={() => setActiveTab('converter')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'converter' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <RefreshCcw size={18} />
+                Chuyển đổi nâng cao
+              </button>
+            </div>
           </div>
 
           {/* Main Content */}
@@ -659,20 +669,20 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                           <th className="px-2 py-4 text-[9px] font-black text-red-600 uppercase tracking-tighter bg-red-50/30">Nghi UT</th>
                           
                           {/* COPD */}
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C1</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C2</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C3</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C4</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">COPD-C5</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Ho (COPD)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Đờm (COPD)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Khó thở (COPD)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Trên 40T (COPD)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Hút thuốc (COPD)</th>
                           
                           {/* Hen */}
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C1</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C2</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C3</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C4</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C5</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C6</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Hen-C7</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Khò khè (Hen)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Khó thở đêm (Hen)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Ho đêm (Hen)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Nặng ngực (Hen)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Gắng sức (Hen)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Nghỉ ngơi (Hen)</th>
+                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Công việc (Hen)</th>
                           
                           {/* Kết luận */}
                           <th className="px-4 py-4 text-[10px] font-black text-slate-900 uppercase tracking-widest bg-slate-100">KL ĐTD</th>
@@ -724,23 +734,27 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                               {/* Dấu hiệu nghi ngờ */}
                               <td className="px-2 py-4 text-center"><YesNoBadge value={s.signHTN} /></td>
                               <td className="px-2 py-4 text-center"><YesNoBadge value={s.signDiabetes} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.signCancer} /></td>
+                              <td className="px-2 py-4 text-center">
+                                <span title="Sores/Lump/Bleeding/Swallow/Cough" className="cursor-help">
+                                  <YesNoBadge value={s.signCancer_sores || s.signCancer_lump || s.signCancer_bleeding || s.signCancer_swallow || s.signCancer_cough} />
+                                </span>
+                              </td>
                               
                               {/* COPD */}
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_q1} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_q2} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_q3} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_cough} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_phlegm} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_dyspnea} /></td>
                               <td className="px-2 py-4 text-center"><YesNoBadge value={s.age >= 40} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_q5} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.smoking || s.formerSmoker} /></td>
                               
                               {/* Hen */}
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q1} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q2} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q3} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q4} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q5} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q6} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_q7} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_wheeze} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_night_breathless} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_night_cough} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_tight_chest} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_exercise_breathless} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_rest_breathless} /></td>
+                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_work_related} /></td>
                               
                               {/* Kết luận riêng biệt */}
                               <td className="px-4 py-4">
@@ -749,16 +763,15 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                                 </span>
                               </td>
                               <td className="px-4 py-4">
-                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${s.copdCount >= 3 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                                  {s.copdCount >= 3 ? 'Nghi ngờ' : 'Bình thường'}
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${(s.copdPositiveCount || s.copdCount) >= 3 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                  {(s.copdPositiveCount || s.copdCount) >= 3 ? 'Nghi ngờ' : 'Bình thường'}
                                 </span>
                               </td>
                               <td className="px-4 py-4">
-                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${s.asthmaCount >= 2 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                                  {s.asthmaCount >= 2 ? 'Nghi ngờ' : 'Bình thường'}
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${(s.asthmaPositiveCount || s.asthmaCount) >= 2 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                  {(s.asthmaPositiveCount || s.asthmaCount) >= 2 ? 'Nghi ngờ' : 'Bình thường'}
                                 </span>
                               </td>
-                              
                               <td className="px-4 py-4 text-right sticky right-0 bg-white group-hover:bg-slate-50/30 z-10 border-l border-slate-100 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                                 <button 
                                   onClick={() => deleteScreening(s.id)}
@@ -804,6 +817,12 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'converter' && (
+              <div className="space-y-6">
+                <AdvancedConverter onBack={() => setActiveTab('dashboard')} />
               </div>
             )}
           </div>
