@@ -9,40 +9,6 @@ import Login from './components/Login';
 import { auth, db } from './firebase';
 import { collection, doc, setDoc, getDocs, writeBatch, query, where, serverTimestamp, getDocFromServer } from 'firebase/firestore';
 
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: 'create' | 'update' | 'delete' | 'list' | 'get' | 'write';
-  path: string | null;
-  authInfo: {
-    userId: string;
-    email: string;
-    emailVerified: boolean;
-    isAnonymous: boolean;
-    providerInfo: { providerId: string; displayName: string; email: string; }[];
-  }
-}
-
-const handleFirestoreError = (error: any, operationType: FirestoreErrorInfo['operationType'], path: string | null = null) => {
-  const user = auth.currentUser;
-  const errorInfo: FirestoreErrorInfo = {
-    error: error.message || 'Unknown error',
-    operationType,
-    path,
-    authInfo: {
-      userId: user?.uid || 'unauthenticated',
-      email: user?.email || '',
-      emailVerified: user?.emailVerified || false,
-      isAnonymous: user?.isAnonymous || false,
-      providerInfo: user?.providerData.map(p => ({
-        providerId: p.providerId,
-        displayName: p.displayName || '',
-        email: p.email || ''
-      })) || []
-    }
-  };
-  throw new Error(JSON.stringify(errorInfo));
-};
-
 const THA_COLUMNS = [
   'Họ tên (*)', 'Giới tính (*)', 'Năm sinh (*)', 'Mã BHYT (*)', 'Số CMT/CCCD (*)',
   'Số điện thoại', 'Địa chỉ', 'Xã/Phường/Thị trấn (*)', 'Ngày phát hiện bệnh',
@@ -80,7 +46,7 @@ const COPD_COLUMNS = [
 
 import { AdvancedConverter } from './components/AdvancedConverter';
 import { 
-  FileUp, Building2, LayoutGrid, ChevronDown, CheckCircle2,
+  FileUp, LayoutGrid, ChevronDown, CheckCircle2,
   Table, Activity as ActivityIcon, ArrowLeft
 } from 'lucide-react';
 
@@ -579,94 +545,14 @@ function MainApp() {
     XLSX.writeFile(wb, "Danh_sach_benh_nhan_den_kham.xlsx");
   };
 
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<{ success?: string, error?: string, duplicates?: string[] } | null>(null);
-
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
-      }
-    }
-    testConnection();
-  }, []);
-
-  const syncToFirebase = async () => {
-    if (formattedPatientData.length === 0) return;
-    setIsSyncing(true);
-    setSyncStatus(null);
-    
-    try {
-      const patientsRef = collection(db, 'patients_2026');
-      let querySnapshot;
-      try {
-        querySnapshot = await getDocs(patientsRef);
-      } catch (err: any) {
-        handleFirestoreError(err, 'list', 'patients_2026');
-        return;
-      }
-      
-      const existingIds = new Set(querySnapshot.docs.map(doc => doc.id));
-      
-      const batch = writeBatch(db);
-      let newCount = 0;
-      let updateCount = 0;
-      let duplicateIds: string[] = [];
-
-      for (const patient of formattedPatientData) {
-        const patientId = String(patient['Mã BN']).trim();
-        if (!patientId) continue;
-
-        if (existingIds.has(patientId)) {
-          duplicateIds.push(patientId);
-          updateCount++;
-        } else {
-          newCount++;
-        }
-
-        const docRef = doc(patientsRef, patientId);
-        batch.set(docRef, {
-          ...patient,
-          syncAt: serverTimestamp(),
-          syncedBy: profile?.email || user?.email || 'unknown'
-        }, { merge: true });
-      }
-
-      try {
-        await batch.commit();
-      } catch (err: any) {
-        handleFirestoreError(err, 'write', 'patients_2026');
-      }
-      
-      setSyncStatus({ 
-        success: `Đồng bộ thành công: ${newCount} hồ sơ mới, ${updateCount} hồ sơ cập nhật.`,
-        duplicates: duplicateIds.length > 0 ? duplicateIds : undefined
-      });
-    } catch (err: any) {
-      console.error(err);
-      let message = err.message;
-      try {
-        const parsed = JSON.parse(err.message);
-        message = `Lỗi (${parsed.operationType}): ${parsed.error}`;
-      } catch (e) {}
-      setSyncStatus({ error: `Lỗi đồng bộ: ${message}` });
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sectionFileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = profile?.role === 'admin' || profile?.email === 'sonlyhongduc@gmail.com';
   const isSubAdmin = profile?.role === 'subadmin';
   const isAuthorized = isAdmin || isSubAdmin;
-  const hasPremiumAccess = true; // All features unlocked
-  const hasAdvancedAccess = isAdmin; // ONLY Admin can access advanced config
+  const hasPremiumAccess = true; 
+  const hasAdvancedAccess = isAdmin; 
 
   const transformData = (data: any[], currentGenderFormat: 'text' | 'number', currentAdminUnit: string) => {
     const currentYear = new Date().getFullYear();
@@ -767,12 +653,24 @@ function MainApp() {
       let dbp = parseFloat(dbpRaw);
       const isMissingBP = (isNaN(sbp) || sbp <= 0) && (isNaN(dbp) || dbp <= 0);
 
+      let waistRaw = getVal(row, ['VONG_EO', 'Vòng eo']);
+      let waist = parseFloat(waistRaw);
+      const isMissingWaist = isNaN(waist) || waist <= 0 || String(waistRaw).toLowerCase().includes('không');
+
       // 2. Randomized Values (Calculated once per row, but stable)
       let randWeight = weight;
       let randHeight = height;
+      let randWaist = waist;
       if (randomHeightWeight && isAdmin) {
         if (isMissingWeight) randWeight = Math.floor(getStableRandom(row, 'weight', 0) * (75 - 50 + 1)) + 50;
         if (isMissingHeight) randHeight = Math.floor(getStableRandom(row, 'height', 1) * (170 - 158 + 1)) + 158;
+        if (isMissingWaist) {
+          if (isMale) {
+            randWaist = Math.floor(getStableRandom(row, 'waist', 3) * (100 - 75 + 1)) + 75;
+          } else {
+            randWaist = Math.floor(getStableRandom(row, 'waist', 3) * (90 - 65 + 1)) + 65;
+          }
+        }
       }
 
       let randFamily = familyHistory;
@@ -837,15 +735,14 @@ function MainApp() {
           bmi = parseFloat((randWeight / (hMeter * hMeter)).toFixed(1));
         }
 
-        const waist = parseFloat(getVal(row, ['VONG_EO', 'Vòng eo']));
         const ptsGender = isMale ? 2 : 0;
         const ptsAge = age < 45 ? 0 : (age <= 49 ? 1 : 2);
         const ptsFamily = randFamily === 'Có' ? 4 : 0;
         const ptsBMI = bmi < 23 ? 0 : (bmi < 27.5 ? 3 : 5);
         
         let ptsWaist = 0;
-        if (isMale) ptsWaist = waist >= 90 ? 2 : 0;
-        else ptsWaist = waist >= 80 ? 2 : 0;
+        if (isMale) ptsWaist = randWaist >= 90 ? 2 : 0;
+        else ptsWaist = randWaist >= 80 ? 2 : 0;
 
         const ptsBP = (randSBP >= 140 || randDBP >= 90) ? 2 : 0;
         const totalPts = ptsGender + ptsAge + ptsFamily + ptsBMI + ptsWaist + ptsBP;
@@ -854,9 +751,18 @@ function MainApp() {
           ...commonFields,
           'Tuổi': age,
           'Gia đình mắc ĐTD': randFamily,
+          'Chiều cao': randHeight || '',
+          'Cân nặng': randWeight || '',
           'BMI': bmi || '',
+          'Vòng eo': randWaist || '',
           'HA tâm thu (*)': randSBP || '',
           'HA tâm trương (*)': randDBP || '',
+          'Điểm Giới tính': ptsGender,
+          'Điểm Tuổi': ptsAge,
+          'Điểm Gia đình': ptsFamily,
+          'Điểm BMI': ptsBMI,
+          'Điểm Vòng eo': ptsWaist,
+          'Điểm Huyết áp': ptsBP,
           'Tổng điểm': totalPts,
           'Nguy cơ Đái tháo đường': totalPts >= 6 ? 'Có' : 'Không',
           'Nghi ngờ Tăng huyết áp': ptsBP > 0 ? 'Có' : 'Không'
@@ -865,30 +771,36 @@ function MainApp() {
 
       // COPD & Hen logic
       if (age >= 50) {
-        const getStableYN = (seed: string, offset: number, bias = 0.9) => getStableRandom(row, seed, offset) > bias ? 'Có' : 'Không';
-
         const henFields: any = {};
         const henKeys = ['Hen-C1', 'Hen-C2', 'Hen-C3', 'Hen-C4', 'Hen-C5', 'Hen-C6', 'Hen-C7'];
-        henKeys.forEach((k, idx) => {
-          const existing = getVal(row, [k, k.replace('-', '_')]);
-          if (randomCOPD && isAdmin && (!existing || existing === '' || existing === 'Không')) {
-            henFields[k] = getStableYN('hen', idx, 0.95);
-          } else {
-            henFields[k] = existing || 'Không';
-          }
-        });
+        henKeys.forEach(k => { henFields[k] = getVal(row, [k, k.replace('-', '_')]) || 'Không'; });
 
         const copdFields: any = {};
         const copdKeys = ['COPD-C1', 'COPD-C2', 'COPD-C3', 'COPD-C4', 'COPD-C5'];
-        copdKeys.forEach((k, idx) => {
-          const existing = getVal(row, [k, k.replace('-', '_')]);
-          if (randomCOPD && isAdmin && (!existing || existing === '' || existing === 'Không')) {
-            if (k === 'COPD-C4') copdFields[k] = 'Có'; // Age >= 40 is default true
-            else copdFields[k] = getStableYN('copd', idx, 0.92);
-          } else {
-            copdFields[k] = existing || 'Không';
-          }
+        copdKeys.forEach(k => {
+          let val = getVal(row, [k, k.replace('-', '_')]) || 'Không';
+          if (k === 'COPD-C4' && (val === '' || val === 'Không')) val = 'Có';
+          copdFields[k] = val;
         });
+
+        if (randomCOPD && isAdmin) {
+          const addSymptoms = (fields: any, keys: string[], seedPrefix: string) => {
+            // Determine if this person should have symptoms at all (approx 10% chance)
+            if (getStableRandom(row, seedPrefix + 'DiseaseProb', 999) > 0.1) return;
+
+            // Pick 1-2 symptoms for this person
+            const numToPick = Math.floor(getStableRandom(row, seedPrefix + 'Count', 777) * 2) + 1; // 1 or 2
+            
+            // Shuffle keys slightly using stable random
+            const shuffledKeys = [...keys].sort((a,b) => getStableRandom(row, seedPrefix + a, 1) - getStableRandom(row, seedPrefix + b, 2));
+
+            for (let i = 0; i < numToPick; i++) {
+              fields[shuffledKeys[i]] = 'Có';
+            }
+          };
+          addSymptoms(henFields, henKeys, 'hen');
+          addSymptoms(copdFields, copdKeys, 'copd');
+        }
 
         const henCount = Object.values(henFields).filter(v => v === 'Có').length;
         const copdCount = Object.values(copdFields).filter(v => v === 'Có').length;
@@ -1441,6 +1353,7 @@ function MainApp() {
     
     const counts = new Map<string, number>();
     currentData.forEach(row => {
+      if (!row) return;
       const bhyt = String(row['Mã BHYT (*)'] || '').trim();
       if (bhyt) {
         const key = bhyt.length >= 10 ? bhyt.slice(-10) : bhyt;
@@ -1457,12 +1370,15 @@ function MainApp() {
     return duplicates;
   }, [currentData, removeDuplicates]);
 
-  const currentColumns = activeTab === 'MANIFEST' ? (inputData.length > 0 ? Object.keys(inputData[0]) : []) : (activeTab === 'DTD' ? DTD_COLUMNS : (activeTab === 'SCREENING' ? SCREENING_COLUMNS : (activeTab === 'COPD' ? COPD_COLUMNS : THA_COLUMNS)));
+  const currentColumns = activeTab === 'MANIFEST' 
+    ? (inputData.length > 0 && inputData[0] ? Object.keys(inputData[0]) : []) 
+    : (activeTab === 'DTD' ? DTD_COLUMNS : (activeTab === 'SCREENING' ? SCREENING_COLUMNS : (activeTab === 'COPD' ? COPD_COLUMNS : THA_COLUMNS)));
 
   const searchedData = useMemo(() => {
     const q = (searchQueries[activeTab] || '').toLowerCase().trim();
     if (!q) return currentData;
     return currentData.filter(row => {
+      if (!row) return false;
       return Object.values(row).some(v => String(v).toLowerCase().includes(q));
     });
   }, [currentData, activeTab, searchQueries]);
@@ -2220,7 +2136,7 @@ function MainApp() {
             <div className="lg:col-span-8 xl:col-span-4">
               {/* Stats Section */}
               <AnimatePresence>
-                {inputData.length > 0 ? (
+                {(inputData.length > 0) ? (
                   <motion.section 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -2238,7 +2154,9 @@ function MainApp() {
                         <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">THA</span>
                       </div>
                       <div className="relative z-10 pt-2">
-                        <p className="text-4xl font-black text-slate-900 leading-none">{filteredTHA.length}</p>
+                        <p className="text-4xl font-black text-slate-900 leading-none">
+                          {filteredTHA.length}
+                        </p>
                         <p className="text-[11px] font-bold text-slate-400 mt-2 uppercase tracking-wide">Bệnh nhân Tăng huyết áp</p>
                       </div>
                     </div>
@@ -2253,7 +2171,9 @@ function MainApp() {
                         <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">ĐTĐ</span>
                       </div>
                       <div className="relative z-10 pt-2">
-                        <p className="text-4xl font-black text-slate-900 leading-none">{filteredDTD.length}</p>
+                        <p className="text-4xl font-black text-slate-900 leading-none">
+                          {filteredDTD.length}
+                        </p>
                         <p className="text-[11px] font-bold text-slate-400 mt-2 uppercase tracking-wide">Bệnh nhân Đái tháo đường</p>
                       </div>
                     </div>
@@ -2269,8 +2189,12 @@ function MainApp() {
                         <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest bg-slate-800/50 border border-slate-700 px-2 py-1 rounded-md">Tổng cộng</span>
                       </div>
                       <div className="relative z-10 pt-2">
-                        <p className="text-5xl font-black text-white leading-none">{filteredTHA.length + filteredDTD.length}</p>
-                        <p className="text-[11px] font-bold text-slate-400 mt-2 uppercase tracking-wide">Dữ liệu đã lọc thành công</p>
+                        <p className="text-5xl font-black text-white leading-none">
+                          {filteredTHA.length + filteredDTD.length}
+                        </p>
+                        <p className="text-[11px] font-bold text-slate-400 mt-2 uppercase tracking-wide">
+                          Dữ liệu đã lọc thành công
+                        </p>
                       </div>
                     </div>
                   </motion.section>
@@ -3046,133 +2970,6 @@ function MainApp() {
 
 
 
-                {/* Patient Management Stats Card */}
-                {formattedPatientData.length > 0 && (
-                  <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-6">
-                    <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <div>
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                          <Activity size={18} className="text-blue-600" />
-                          Quản lý danh sách đến khám tại trạm (2026)
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1">
-                          Tổng số người đến khám: <span className="font-bold text-blue-600">{formattedPatientData.length}</span> người ({inputData.length} lượt khám).
-                        </p>
-                      </div>
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                        <input 
-                          type="file" 
-                          ref={sectionFileInputRef}
-                          onChange={handleFileUpload}
-                          className="hidden" 
-                          accept=".xlsx, .xls, .csv"
-                        />
-                        <button 
-                          onClick={() => sectionFileInputRef.current?.click()}
-                          className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 shadow-sm"
-                        >
-                          <FileUp size={14} />
-                          Nhập từ file
-                        </button>
-                        <button 
-                          onClick={syncToFirebase}
-                          disabled={isSyncing}
-                          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-sm ${
-                            isSyncing ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'
-                          }`}
-                        >
-                          {isSyncing ? <RefreshCcw size={14} className="animate-spin" /> : <Database size={14} />}
-                          {isSyncing ? 'Đang đồng bộ...' : 'Lưu vào Firebase'}
-                        </button>
-                        <button 
-                          onClick={exportPatientStats}
-                          className="px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 shadow-sm"
-                        >
-                          <Download size={14} />
-                          Xuất danh sách ({formattedPatientData.length})
-                        </button>
-                      </div>
-                    </div>
-
-                    {syncStatus && (
-                      <div className={`mx-5 mt-4 p-4 rounded-xl border ${
-                        syncStatus.error ? 'bg-red-50 border-red-100 text-red-700' : 'bg-blue-50 border-blue-100 text-blue-700'
-                      }`}>
-                        <div className="flex items-start gap-3">
-                          {syncStatus.error ? <ShieldAlert size={18} className="flex-shrink-0" /> : <CheckCircle2 size={18} className="flex-shrink-0" />}
-                          <div className="flex-1">
-                            <p className="text-xs font-bold">{syncStatus.error || syncStatus.success}</p>
-                            {syncStatus.duplicates && syncStatus.duplicates.length > 0 && (
-                              <div className="mt-2 text-[10px] bg-white/50 p-2 rounded-lg border border-blue-100">
-                                <p className="font-bold mb-1 uppercase tracking-wider">Cảnh báo trùng lặp ({syncStatus.duplicates.length} mã BN):</p>
-                                <p className="opacity-80 leading-relaxed max-h-20 overflow-y-auto">
-                                  Hệ thống đã phát hiện và cập nhật thông tin cho các mã: {syncStatus.duplicates.join(', ')}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                          <button onClick={() => setSyncStatus(null)} className="text-slate-400 hover:text-slate-600">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="overflow-x-auto max-h-[500px] no-scrollbar">
-                      <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
-                          <tr>
-                            {Object.keys(formattedPatientData[0]).map((col, idx) => (
-                              <th key={idx} className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
-                                {col}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {formattedPatientData.slice(0, displayLimitPatient).map((row, rowIndex) => (
-                            <tr key={rowIndex} className="hover:bg-slate-50/50 transition-colors">
-                              {Object.keys(formattedPatientData[0]).map((col, colIndex) => (
-                                <td key={colIndex} className="px-4 py-3 text-xs font-medium text-slate-600 whitespace-nowrap">
-                                  {row[col as keyof typeof row] === undefined || row[col as keyof typeof row] === null || row[col as keyof typeof row] === '' ? (
-                                    <span className="italic text-slate-300">Không</span>
-                                  ) : (
-                                    row[col as keyof typeof row]
-                                  )}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    
-                    {/* Pagination Controls for Patient Management */}
-                    <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Hiển thị {Math.min(displayLimitPatient, formattedPatientData.length)} / {formattedPatientData.length} bản ghi
-                      </p>
-                      <div className="flex items-center gap-3">
-                        {displayLimitPatient < formattedPatientData.length && (
-                          <>
-                            <button 
-                              onClick={() => setDisplayLimitPatient(prev => prev + 50)}
-                              className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors shadow-sm"
-                            >
-                              Xem thêm 50
-                            </button>
-                            <button 
-                              onClick={() => setDisplayLimitPatient(formattedPatientData.length)}
-                              className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"
-                            >
-                              Xem tất cả
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </section>
-                )}
             </div>
           )}
         </main>
