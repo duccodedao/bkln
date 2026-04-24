@@ -6,6 +6,43 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import AdminPanel from './components/AdminPanel';
 import Login from './components/Login';
 
+import { auth, db } from './firebase';
+import { collection, doc, setDoc, getDocs, writeBatch, query, where, serverTimestamp, getDocFromServer } from 'firebase/firestore';
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: 'create' | 'update' | 'delete' | 'list' | 'get' | 'write';
+  path: string | null;
+  authInfo: {
+    userId: string;
+    email: string;
+    emailVerified: boolean;
+    isAnonymous: boolean;
+    providerInfo: { providerId: string; displayName: string; email: string; }[];
+  }
+}
+
+const handleFirestoreError = (error: any, operationType: FirestoreErrorInfo['operationType'], path: string | null = null) => {
+  const user = auth.currentUser;
+  const errorInfo: FirestoreErrorInfo = {
+    error: error.message || 'Unknown error',
+    operationType,
+    path,
+    authInfo: {
+      userId: user?.uid || 'unauthenticated',
+      email: user?.email || '',
+      emailVerified: user?.emailVerified || false,
+      isAnonymous: user?.isAnonymous || false,
+      providerInfo: user?.providerData.map(p => ({
+        providerId: p.providerId,
+        displayName: p.displayName || '',
+        email: p.email || ''
+      })) || []
+    }
+  };
+  throw new Error(JSON.stringify(errorInfo));
+};
+
 const THA_COLUMNS = [
   'Họ tên (*)', 'Giới tính (*)', 'Năm sinh (*)', 'Mã BHYT (*)', 'Số CMT/CCCD (*)',
   'Số điện thoại', 'Địa chỉ', 'Xã/Phường/Thị trấn (*)', 'Ngày phát hiện bệnh',
@@ -191,44 +228,75 @@ function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) 
   const [org, setOrg] = useState('');
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full">
-        <div className="flex justify-center mb-6">
-          <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-16 w-auto object-contain" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">Thiết lập hồ sơ</h2>
-        <p className="text-gray-500 mb-6 text-center text-sm">Vui lòng cung cấp thông tin để tiếp tục sử dụng hệ thống.</p>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tên Cá nhân (*)</label>
-            <input 
-              type="text" 
-              className="w-full border border-gray-300 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ví dụ: Nguyễn Văn A"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tên Đơn vị (*)</label>
-            <input 
-              type="text" 
-              className="w-full border border-gray-300 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-500"
-              value={org}
-              onChange={(e) => setOrg(e.target.value)}
-              placeholder="Ví dụ: Trạm Y tế Xã A"
-            />
-          </div>
-          <button 
-            onClick={() => onSubmit(name, org)}
-            disabled={!name || !org}
-            className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            Hoàn tất
-          </button>
-        </div>
+    <div className="min-h-screen bg-white flex items-center justify-center p-6 relative overflow-hidden">
+      {/* Background Decor */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-50 rounded-full blur-[100px] opacity-50" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-50 rounded-full blur-[100px] opacity-50" />
       </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative z-10 w-full max-w-md"
+      >
+        <div className="bg-white p-10 rounded-[3rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.1)] border border-slate-100">
+          <div className="flex flex-col items-center mb-10">
+            <div className="p-4 bg-blue-50 rounded-3xl mb-4 shadow-inner">
+              <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-12 w-auto object-contain" />
+            </div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Thiết lập <span className="text-blue-600">Hồ sơ</span></h2>
+            <div className="h-1 w-12 bg-blue-600 rounded-full mt-2" />
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-4">Kích hoạt tài khoản định danh</p>
+          </div>
+          
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên Cá nhân <span className="text-blue-600">(*)</span></label>
+              <div className="relative group">
+                <div className="absolute inset-0 bg-blue-600/5 rounded-2xl scale-105 opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                <input 
+                  type="text" 
+                  className="relative w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all shadow-sm"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ví dụ: Nguyễn Văn A"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên Đơn vị <span className="text-blue-600">(*)</span></label>
+              <div className="relative group">
+                <div className="absolute inset-0 bg-blue-600/5 rounded-2xl scale-105 opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                <input 
+                  type="text" 
+                  className="relative w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all shadow-sm"
+                  value={org}
+                  onChange={(e) => setOrg(e.target.value)}
+                  placeholder="Ví dụ: Trạm Y tế Xã A"
+                />
+              </div>
+            </div>
+
+            <motion.button 
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => onSubmit(name, org)}
+              disabled={!name || !org}
+              className="w-full py-5 bg-slate-900 text-white rounded-[2rem] text-xs font-black uppercase tracking-[0.3em] shadow-2xl shadow-slate-200 hover:bg-slate-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all mt-8"
+            >
+              HOÀN TẤT KÍCH HOẠT
+            </motion.button>
+          </div>
+
+          <div className="mt-12 flex items-center justify-center gap-4 opacity-20 grayscale">
+             <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="BMASS" className="h-6 w-auto" />
+             <div className="w-1.5 h-1.5 bg-slate-900 rounded-full" />
+             <span className="text-[8px] font-black uppercase tracking-[0.4em]">Powered by BMASS Cloud</span>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -289,7 +357,7 @@ function MainApp() {
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<'THA' | 'DTD' | 'OVER40' | 'OVER50' | 'SCREENING' | 'COPD'>('THA');
+  const [activeTab, setActiveTab] = useState<'THA' | 'DTD' | 'OVER40' | 'OVER50' | 'SCREENING' | 'COPD' | 'MANIFEST'>('THA');
   const [displayLimit, setDisplayLimit] = useState(50);
   const [displayLimitPatient, setDisplayLimitPatient] = useState(50);
   const [processProgress, setProcessProgress] = useState(0);
@@ -511,7 +579,88 @@ function MainApp() {
     XLSX.writeFile(wb, "Danh_sach_benh_nhan_den_kham.xlsx");
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ success?: string, error?: string, duplicates?: string[] } | null>(null);
+
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    }
+    testConnection();
+  }, []);
+
+  const syncToFirebase = async () => {
+    if (formattedPatientData.length === 0) return;
+    setIsSyncing(true);
+    setSyncStatus(null);
+    
+    try {
+      const patientsRef = collection(db, 'patients_2026');
+      let querySnapshot;
+      try {
+        querySnapshot = await getDocs(patientsRef);
+      } catch (err: any) {
+        handleFirestoreError(err, 'list', 'patients_2026');
+        return;
+      }
+      
+      const existingIds = new Set(querySnapshot.docs.map(doc => doc.id));
+      
+      const batch = writeBatch(db);
+      let newCount = 0;
+      let updateCount = 0;
+      let duplicateIds: string[] = [];
+
+      for (const patient of formattedPatientData) {
+        const patientId = String(patient['Mã BN']).trim();
+        if (!patientId) continue;
+
+        if (existingIds.has(patientId)) {
+          duplicateIds.push(patientId);
+          updateCount++;
+        } else {
+          newCount++;
+        }
+
+        const docRef = doc(patientsRef, patientId);
+        batch.set(docRef, {
+          ...patient,
+          syncAt: serverTimestamp(),
+          syncedBy: profile?.email || user?.email || 'unknown'
+        }, { merge: true });
+      }
+
+      try {
+        await batch.commit();
+      } catch (err: any) {
+        handleFirestoreError(err, 'write', 'patients_2026');
+      }
+      
+      setSyncStatus({ 
+        success: `Đồng bộ thành công: ${newCount} hồ sơ mới, ${updateCount} hồ sơ cập nhật.`,
+        duplicates: duplicateIds.length > 0 ? duplicateIds : undefined
+      });
+    } catch (err: any) {
+      console.error(err);
+      let message = err.message;
+      try {
+        const parsed = JSON.parse(err.message);
+        message = `Lỗi (${parsed.operationType}): ${parsed.error}`;
+      } catch (e) {}
+      setSyncStatus({ error: `Lỗi đồng bộ: ${message}` });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sectionFileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = profile?.role === 'admin' || profile?.email === 'sonlyhongduc@gmail.com';
   const isSubAdmin = profile?.role === 'subadmin';
@@ -1191,6 +1340,13 @@ function MainApp() {
   };
 
   const handleDownload = () => {
+    if (activeTab === 'MANIFEST') {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(inputData);
+      XLSX.utils.book_append_sheet(wb, ws, "Full_Manifest");
+      XLSX.writeFile(wb, `${fileName}_Full_Manifest.xlsx`);
+      return;
+    }
     if (activeTab === 'OVER40') {
       executeDownload(false, false, true, false, false, false);
       return;
@@ -1270,6 +1426,7 @@ function MainApp() {
   };
 
   const currentData = useMemo(() => {
+    if (activeTab === 'MANIFEST') return inputData;
     if (activeTab === 'THA') return filteredTHA;
     if (activeTab === 'DTD') return filteredDTD;
     if (activeTab === 'OVER40') return over40List;
@@ -1277,7 +1434,7 @@ function MainApp() {
     if (activeTab === 'SCREENING') return filteredScreening;
     if (activeTab === 'COPD') return filteredCOPD;
     return [];
-  }, [activeTab, filteredTHA, filteredDTD, over40List, over50List, filteredScreening, filteredCOPD]);
+  }, [activeTab, inputData, filteredTHA, filteredDTD, over40List, over50List, filteredScreening, filteredCOPD]);
 
   const duplicateKeys = useMemo(() => {
     if (removeDuplicates) return new Set<string>();
@@ -1300,7 +1457,7 @@ function MainApp() {
     return duplicates;
   }, [currentData, removeDuplicates]);
 
-  const currentColumns = activeTab === 'DTD' ? DTD_COLUMNS : (activeTab === 'SCREENING' ? SCREENING_COLUMNS : (activeTab === 'COPD' ? COPD_COLUMNS : THA_COLUMNS));
+  const currentColumns = activeTab === 'MANIFEST' ? (inputData.length > 0 ? Object.keys(inputData[0]) : []) : (activeTab === 'DTD' ? DTD_COLUMNS : (activeTab === 'SCREENING' ? SCREENING_COLUMNS : (activeTab === 'COPD' ? COPD_COLUMNS : THA_COLUMNS)));
 
   const searchedData = useMemo(() => {
     const q = (searchQueries[activeTab] || '').toLowerCase().trim();
@@ -1312,10 +1469,88 @@ function MainApp() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Loading" className="h-20 w-auto object-contain mb-4 animate-pulse" />
-        <div className="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-          <div className="h-full bg-blue-600 animate-progress"></div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white relative overflow-hidden">
+        {/* Architectural Background */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.3, 1],
+              opacity: [0.3, 0.6, 0.3],
+              rotate: [0, 45, 0]
+            }}
+            transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+            className="absolute -top-[20%] -left-[20%] w-[60%] h-[60%] bg-blue-50 rounded-full blur-[120px]"
+          />
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.2, 1],
+              opacity: [0.2, 0.5, 0.2],
+              rotate: [0, -45, 0]
+            }}
+            transition={{ duration: 12, repeat: Infinity, ease: "linear", delay: 2 }}
+            className="absolute -bottom-[20%] -right-[20%] w-[60%] h-[60%] bg-indigo-50 rounded-full blur-[120px]"
+          />
+        </div>
+
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 flex flex-col items-center"
+        >
+          <div className="relative mb-12 flex items-center justify-center">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+              className="absolute w-40 h-40 border-2 border-blue-100 rounded-full border-dashed"
+            />
+            <motion.div
+              animate={{ rotate: -360 }}
+              transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+              className="absolute w-32 h-32 border border-blue-50 rounded-full opacity-50"
+            />
+            <motion.img 
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3, duration: 1 }}
+              src="https://tytpht.hdd.io.vn/img/bmassloadings.png" 
+              alt="Loading" 
+              className="h-28 w-auto object-contain relative z-20 drop-shadow-2xl" 
+            />
+          </div>
+          
+          <div className="space-y-6 text-center max-w-xs">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="space-y-2"
+            >
+              <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">BMASS <span className="text-blue-600">HEALTH</span></h2>
+              <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+            </motion.div>
+            
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-48 h-1 bg-slate-100 rounded-full overflow-hidden relative shadow-inner">
+                <motion.div 
+                  initial={{ x: "-100%" }}
+                  animate={{ x: "100%" }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute h-full w-1/2 bg-gradient-to-r from-transparent via-blue-600 to-transparent"
+                />
+              </div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] animate-pulse">Initializing Security Layer</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Technical Detail Elements */}
+        <div className="absolute bottom-12 left-12 opacity-10 hidden sm:block">
+           <div className="font-mono text-[10px] text-slate-900 space-y-1">
+             <p>SYSTEM_BOOT_SEQUENCE: 100%</p>
+             <p>DATABASE_SYNC: ENABLED</p>
+             <p>SECURITY_PROTOCOL_v4: ACTIVE</p>
+           </div>
         </div>
       </div>
     );
@@ -1323,47 +1558,196 @@ function MainApp() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900">
-        {/* Top Header for Guest */}
-        <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 p-4">
-          <div className="max-w-7xl mx-auto flex items-center gap-6">
-            <button 
-              onClick={() => setShowLogin(true)}
-              className="px-6 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all flex items-center gap-2"
-            >
-              <LogIn size={18} />
-              Đăng nhập
-            </button>
-            <div className="flex items-center gap-3">
-              <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-8 w-auto" />
-              <span className="font-black text-slate-900 tracking-tight hidden sm:inline">BMASS HEALTH</span>
+      <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden">
+        {/* Advanced Grid & Radial Background */}
+        <div className="fixed inset-0 pointer-events-none">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,#f8fbff_0%,#ffffff_100%)]" />
+          <div className="absolute inset-0 opacity-[0.4]" style={{ 
+            backgroundImage: 'linear-gradient(rgba(59,130,246,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.1) 1px, transparent 1px)', 
+            backgroundSize: '80px 80px'
+          }} />
+          <div className="absolute inset-0 opacity-[0.2]" style={{ 
+            backgroundImage: 'linear-gradient(rgba(59,130,246,0.1) 0.5px, transparent 0.5px), linear-gradient(90deg, rgba(59,130,246,0.1) 0.5px, transparent 0.5px)', 
+            backgroundSize: '20px 20px'
+          }} />
+        </div>
+
+        {/* Premium Transparent Header */}
+        <header className="fixed top-0 left-0 right-0 z-50 bg-white/40 backdrop-blur-2xl border-b border-slate-100/50 px-6 py-4">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-2.5 bg-blue-600 rounded-[1.25rem] shadow-xl shadow-blue-200">
+                <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-8 w-auto brightness-0 invert" />
+              </div>
+              <div>
+                <span className="block font-black text-slate-900 tracking-tight text-xl leading-none uppercase">BMASS</span>
+                <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mt-1 block">Healthcare</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-6">
+              <nav className="hidden lg:flex items-center gap-8">
+                {['Giải pháp', 'Công nghệ', 'Bảo mật', 'Liên hệ'].map(item => (
+                  <a key={item} href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors uppercase tracking-widest">{item}</a>
+                ))}
+              </nav>
+              <div className="h-8 w-[1px] bg-slate-200 hidden sm:block" />
+              <button 
+                onClick={() => setShowLogin(true)}
+                className="group relative px-8 py-3 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-2xl shadow-slate-200"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/0 via-white/5 to-blue-600/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                <span className="relative z-10 flex items-center gap-2">
+                  <LogIn size={16} />
+                  Khởi động
+                </span>
+              </button>
             </div>
           </div>
         </header>
 
-        <main className="pt-32 pb-12 px-4 flex flex-col items-center justify-center min-h-[80vh]">
-          <div className="max-w-4xl mx-auto text-center mb-12">
+        <main className="relative pt-44 pb-32 px-6 overflow-hidden">
+          <div className="max-w-6xl mx-auto text-center flex flex-col items-center">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              className="space-y-8"
             >
-              <h1 className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tight mb-6">
-                Hệ thống Quản lý <br/><span className="text-blue-600">Dữ liệu Y tế</span>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full mb-4 shadow-xl shadow-slate-200">
+                <div className="w-1 h-1 bg-blue-400 rounded-full animate-ping" />
+                <span className="text-[9px] font-black uppercase tracking-[0.4em]">Enterprise Grade Core v2.0</span>
+              </div>
+              
+              <h1 className="text-6xl sm:text-8xl lg:text-9xl font-black text-slate-900 tracking-tighter leading-[0.85] italic uppercase">
+                SỐ HÓA <br/>
+                <span className="text-blue-600 relative inline-block">
+                  Y TẾ 
+                  <motion.div 
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{ delay: 1, duration: 1.5 }}
+                    className="absolute -bottom-2 left-0 w-full h-4 bg-blue-50 -z-10 origin-left"
+                  />
+                </span>
+                <span className="text-slate-300">.</span>
               </h1>
-              <p className="text-xl text-slate-500 font-medium max-w-2xl mx-auto mb-10">
-                Chuyên sâu về chuyển đổi, chuẩn hóa và quản lý dữ liệu danh mục kỹ thuật, thuốc và vật tư y tế.
+              
+              <p className="text-xl sm:text-2xl text-slate-500 font-medium max-w-3xl mx-auto leading-relaxed">
+                Nền tảng kiến trúc dữ liệu thông minh, tự động hóa quy trình chuẩn hóa danh mục kỹ thuật và hồ sơ bệnh án theo tiêu chuẩn HL7-BMASS.
               </p>
               
-              <button 
-                onClick={() => setShowLogin(true)}
-                className="px-10 py-5 bg-blue-600 text-white rounded-2xl text-lg font-black hover:bg-blue-700 transition-all shadow-2xl shadow-blue-500/20 active:scale-95 flex items-center gap-3 mx-auto"
-              >
-                <LogIn size={24} />
-                BẮT ĐẦU SỬ DỤNG
-              </button>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-5 pt-8">
+                <button 
+                  onClick={() => setShowLogin(true)}
+                  className="w-full sm:w-auto group relative px-12 py-6 bg-blue-600 text-white rounded-[2.5rem] text-lg font-black uppercase tracking-tight hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(59,130,246,0.4)] active:scale-95 flex items-center justify-center gap-4"
+                >
+                  BẮT ĐẦU NGAY LẬP TỨC
+                  <ChevronRight size={24} className="group-hover:translate-x-1 transition-transform" />
+                </button>
+                <div className="flex -space-x-4">
+                  {[1,2,3,4].map(i => (
+                    <div key={i} className="w-12 h-12 rounded-full border-4 border-white bg-slate-100 flex items-center justify-center shadow-lg">
+                      <Users size={16} className="text-slate-400" />
+                    </div>
+                  ))}
+                  <div className="pl-6 flex flex-col items-start justify-center">
+                    <span className="text-xs font-black text-slate-900 leading-none text-left">2,400+</span>
+                    <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Người dùng tin tưởng</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* High-End Tech Mockup */}
+            <motion.div
+              initial={{ opacity: 0, y: 100, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: 0.4, duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-32 w-full max-w-7xl relative"
+            >
+              <div className="relative z-10 bg-white/50 backdrop-blur-md rounded-[3rem] p-4 sm:p-8 border border-slate-200/60 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] group">
+                <div className="aspect-[16/10] bg-slate-50 border border-slate-100 rounded-[2rem] overflow-hidden relative shadow-inner">
+                  {/* Decorative Dashboard Elements */}
+                  <div className="absolute top-0 left-0 w-full h-full p-12 flex flex-col items-center justify-center opacity-10">
+                     <Database size={200} strokeWidth={0.5} />
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5" />
+                  
+                  {/* Center UI Preview */}
+                  <div className="absolute inset-0 flex items-center justify-center p-12">
+                     <div className="w-full max-w-3xl bg-white rounded-3xl shadow-3xl border border-slate-200/50 p-8 space-y-6">
+                        <div className="flex items-center justify-between">
+                           <div className="flex gap-2">
+                             <div className="w-3 h-3 rounded-full bg-red-100" />
+                             <div className="w-3 h-3 rounded-full bg-amber-100" />
+                             <div className="w-3 h-3 rounded-full bg-emerald-100" />
+                           </div>
+                           <div className="h-4 w-32 bg-slate-50 rounded-full" />
+                        </div>
+                        <div className="grid grid-cols-12 gap-4">
+                           <div className="col-span-8 space-y-4">
+                             <div className="h-20 w-full bg-blue-50 rounded-2xl" />
+                             <div className="h-40 w-full bg-slate-50 rounded-2xl" />
+                           </div>
+                           <div className="col-span-4 space-y-4">
+                             <div className="h-64 w-full bg-slate-50/50 rounded-2xl" />
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Background Floating Nodes */}
+              <div className="absolute -top-12 -right-12 w-48 h-48 bg-blue-600/5 rounded-full blur-3xl animate-pulse" />
+              <div className="absolute -bottom-12 -left-12 w-64 h-64 bg-indigo-600/5 rounded-full blur-3xl animate-pulse delay-700" />
             </motion.div>
           </div>
         </main>
+
+        <section className="bg-slate-900 py-32 px-6 relative overflow-hidden">
+           <div className="absolute inset-0 opacity-5" style={{ 
+             backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
+             backgroundSize: '40px 40px'
+           }} />
+           <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
+              <div className="space-y-8">
+                 <h2 className="text-4xl sm:text-6xl font-black text-white leading-tight italic">
+                   Bảo mật dữ liệu <br/>
+                   <span className="text-blue-500">là ưu tiên hàng đầu. </span>
+                 </h2>
+                 <p className="text-xl text-slate-400 font-medium leading-relaxed max-w-xl">
+                   Mọi thông tin bệnh án đều được mã hóa theo tiêu chuẩn AES-256 quân đội và lưu trữ trên hệ thống máy chủ chuyên dụng của BMASS.
+                 </p>
+                 <div className="flex gap-4">
+                   <div className="px-6 py-4 bg-white/5 border border-white/10 rounded-3xl flex-1">
+                      <Shield size={32} className="text-blue-500 mb-4" />
+                      <h4 className="font-black text-white text-sm uppercase mb-2">Endpoint Security</h4>
+                      <p className="text-xs text-slate-500 font-bold leading-relaxed">Xác thực đa yếu tố và quét mã độc thời gian thực cho mọi tệp tin tải lên.</p>
+                   </div>
+                   <div className="px-6 py-4 bg-white/5 border border-white/10 rounded-3xl flex-1">
+                      <Lock size={32} className="text-indigo-500 mb-4" />
+                      <h4 className="font-black text-white text-sm uppercase mb-2">Data Privacy</h4>
+                      <p className="text-xs text-slate-500 font-bold leading-relaxed">Tuân thủ nghiêm ngặt các quy định về bảo mật thông tin cá nhân y tế.</p>
+                   </div>
+                 </div>
+              </div>
+              <div className="relative">
+                 <motion.div 
+                   animate={{ rotateY: [0, 10, 0], rotateX: [0, 5, 0] }}
+                   transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                   className="relative z-10 p-12 bg-white/5 border border-white/10 rounded-[3rem] backdrop-blur-3xl aspect-square flex items-center justify-center transform perspective-1000"
+                 >
+                    <ShieldAlert size={200} strokeWidth={0.5} className="text-white opacity-20" />
+                    <div className="absolute flex flex-col items-center gap-4">
+                       <CheckCircle size={80} className="text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
+                       <span className="text-xs font-black text-white tracking-[1em] uppercase ml-4">Encrypted</span>
+                    </div>
+                 </motion.div>
+              </div>
+           </div>
+        </section>
 
         {/* Login Modal */}
         <AnimatePresence>
@@ -1374,23 +1758,27 @@ function MainApp() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setShowLogin(false)}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
               />
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-md"
+                exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                className="relative w-full max-w-lg"
               >
                 <div className="absolute -top-12 right-0">
                   <button 
                     onClick={() => setShowLogin(false)}
-                    className="p-2 text-white/60 hover:text-white transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-white rounded-full text-[10px] font-black text-slate-900 uppercase tracking-widest shadow-xl hover:bg-slate-50 transition-all"
                   >
-                    Đóng [x]
+                    <X size={14} />
+                    Hủy thao tác
                   </button>
                 </div>
-                <Login />
+                <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden p-2">
+                  <Login />
+                </div>
               </motion.div>
             </div>
           )}
@@ -1756,21 +2144,61 @@ function MainApp() {
 
                   {isProcessing && (
                     <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="mt-6 space-y-3"
+                      className="mt-6 p-6 bg-slate-900 rounded-3xl shadow-2xl relative overflow-hidden group"
                     >
-                      <div className="flex justify-between items-end">
-                        <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Đang xử lý...</span>
-                        <span className="text-lg font-black text-blue-600">{processProgress}%</span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <motion.div 
-                          className="h-full bg-blue-600"
-                          initial={{ width: 0 }}
-                          animate={{ width: `${processProgress}%` }}
-                          transition={{ duration: 0.3 }}
-                        />
+                      {/* Technical Grid Overlay */}
+                      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ 
+                        backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
+                        backgroundSize: '20px 20px'
+                      }} />
+                      
+                      {/* Scanning Line Effect */}
+                      <motion.div 
+                        animate={{ top: ['0%', '100%'] }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                        className="absolute left-0 right-0 h-[2px] bg-blue-500/30 blur-[2px] z-10 pointer-events-none"
+                      />
+
+                      <div className="relative z-20 space-y-5">
+                        <div className="flex justify-between items-center">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                               <RefreshCcw size={16} className="text-blue-500 animate-[spin_3s_linear_infinite]" />
+                               <span className="text-[10px] font-black text-white uppercase tracking-[0.4em]">Engine Protocol Active</span>
+                            </div>
+                            <p className="text-[9px] font-bold text-slate-500 tracking-wider">SECURE_DATA_SYNCHRONIZATION_MODULE_v2.0</p>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-3xl font-black text-white italic">{processProgress}<span className="text-blue-500 text-sm ml-0.5 not-italic">%</span></span>
+                            <div className="h-1 w-8 bg-blue-500 rounded-full mt-1" />
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="h-3 bg-slate-800 rounded-full overflow-hidden p-[2px]">
+                            <motion.div 
+                              className="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-400 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.6)]"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${processProgress}%` }}
+                              transition={{ duration: 0.8, ease: "easeOut" }}
+                            />
+                          </div>
+                          <div className="flex justify-between items-center px-1">
+                             <div className="flex gap-1.5 items-center">
+                               {[1,2,3].map(i => (
+                                 <motion.div 
+                                   key={i}
+                                   animate={{ opacity: [0.3, 1, 0.3] }}
+                                   transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
+                                   className="w-1 h-1 bg-blue-400 rounded-full"
+                                 />
+                               ))}
+                             </div>
+                             <span className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em] italic">Architectural Compliance Check...</span>
+                          </div>
+                        </div>
                       </div>
                     </motion.div>
                   )}
@@ -1847,19 +2275,61 @@ function MainApp() {
                     </div>
                   </motion.section>
                 ) : (
-                  <div className="h-full min-h-[220px] bg-white border border-slate-200 border-dashed rounded-3xl flex flex-col items-center justify-center p-8 text-center relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-slate-50 opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    className="h-full min-h-[300px] bg-white border border-slate-100 rounded-[3rem] flex flex-col items-center justify-center p-12 text-center relative overflow-hidden group shadow-sm transition-shadow hover:shadow-md"
+                  >
+                    {/* Architectural Background Pattern */}
+                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ 
+                      backgroundImage: 'radial-gradient(circle at 10px 10px, black 1px, transparent 0)',
+                      backgroundSize: '40px 40px'
+                    }} />
+                    
+                    {/* High-End Decor Elements */}
+                    <motion.div 
+                      animate={{ 
+                        scale: [1, 1.2, 1],
+                        opacity: [0.1, 0.2, 0.1],
+                      }}
+                      transition={{ duration: 10, repeat: Infinity }}
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-100 rounded-full blur-[100px]" 
+                    />
+                    
                     <div className="relative z-10 flex flex-col items-center">
-                      <div className="relative mb-4">
-                        <div className="absolute inset-0 bg-slate-200 rounded-full scale-150 blur-xl opacity-40"></div>
-                        <div className="w-16 h-16 bg-white border border-slate-100 text-slate-300 rounded-[1.5rem] shadow-sm flex items-center justify-center relative z-10 rotate-3 transition-transform group-hover:-rotate-3">
-                          <Database size={28} className="text-slate-400/50" />
+                      <div className="relative mb-10 group-hover:scale-105 transition-transform duration-700">
+                        <div className="absolute inset-0 bg-blue-600/5 rounded-[2.5rem] scale-125 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="w-24 h-24 bg-white border border-slate-200 text-slate-300 rounded-[2.5rem] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.1)] flex items-center justify-center relative z-10 rotate-6 transition-transform group-hover:rotate-0 duration-500">
+                          <Database size={40} className="text-slate-900 drop-shadow-sm" />
+                        </div>
+                        {/* Decorative Badge */}
+                        <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-slate-900 border-4 border-white rounded-2xl flex items-center justify-center text-white shadow-xl">
+                           <Lock size={16} />
                         </div>
                       </div>
-                      <h4 className="text-sm font-black text-slate-400 tracking-tight">Chưa có dữ liệu để thống kê</h4>
-                      <p className="text-[11px] text-slate-400 mt-1.5 font-medium">Vui lòng tải file lên để bắt đầu</p>
+                      
+                      <div className="space-y-4 max-w-sm">
+                        <h4 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">
+                          Kiến Trúc <span className="text-blue-600">Dữ Liệu</span>
+                        </h4>
+                        <div className="h-[1px] w-12 bg-slate-200 mx-auto" />
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.2em] leading-relaxed">
+                          Hệ thống đã sẵn sàng. <br/>
+                          Vui lòng nạp hồ sơ nguồn để khởi tạo báo cáo.
+                        </p>
+                      </div>
+
+                      <motion.button 
+                        whileHover={{ y: -2 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="mt-10 px-8 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] flex items-center gap-3 shadow-2xl shadow-slate-200 hover:bg-slate-800 transition-all"
+                      >
+                        <Upload size={14} />
+                        Nạp dữ liệu ngay
+                      </motion.button>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </div>
@@ -2302,6 +2772,18 @@ function MainApp() {
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full xl:w-auto">
                         <div className="flex p-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto max-w-full">
                           <button 
+                            onClick={() => setActiveTab('MANIFEST')}
+                            className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                              activeTab === 'MANIFEST' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            <LayoutGrid size={14} />
+                            MANIFEST FULL
+                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'MANIFEST' ? 'bg-white/10 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                              {inputData.length}
+                            </span>
+                          </button>
+                          <button 
                             onClick={() => setActiveTab('THA')}
                             className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
                               activeTab === 'THA' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'
@@ -2393,7 +2875,7 @@ function MainApp() {
                       <div className="relative flex-1 w-full">
                         <input
                           type="text"
-                          placeholder={`Tìm kiếm trong ${activeTab === 'THA' ? 'danh sách THA' : (activeTab === 'DTD' ? 'danh sách ĐTĐ' : 'danh sách sàng lọc')}...`}
+                          placeholder={`Tìm kiếm trong ${activeTab === 'MANIFEST' ? 'hồ sơ gốc' : (activeTab === 'THA' ? 'danh sách THA' : (activeTab === 'DTD' ? 'danh sách ĐTĐ' : 'danh sách sàng lọc'))}...`}
                           value={searchQueries[activeTab] || ''}
                           onChange={e => setSearchQueries(prev => ({...prev, [activeTab]: e.target.value}))}
                           className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all font-medium text-slate-700 shadow-sm"
@@ -2577,14 +3059,65 @@ function MainApp() {
                           Tổng số người đến khám: <span className="font-bold text-blue-600">{formattedPatientData.length}</span> người ({inputData.length} lượt khám).
                         </p>
                       </div>
-                      <button 
-                        onClick={exportPatientStats}
-                        className="px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 shadow-sm"
-                      >
-                        <Download size={14} />
-                        Xuất danh sách ({formattedPatientData.length})
-                      </button>
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <input 
+                          type="file" 
+                          ref={sectionFileInputRef}
+                          onChange={handleFileUpload}
+                          className="hidden" 
+                          accept=".xlsx, .xls, .csv"
+                        />
+                        <button 
+                          onClick={() => sectionFileInputRef.current?.click()}
+                          className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                          <FileUp size={14} />
+                          Nhập từ file
+                        </button>
+                        <button 
+                          onClick={syncToFirebase}
+                          disabled={isSyncing}
+                          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-sm ${
+                            isSyncing ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                        >
+                          {isSyncing ? <RefreshCcw size={14} className="animate-spin" /> : <Database size={14} />}
+                          {isSyncing ? 'Đang đồng bộ...' : 'Lưu vào Firebase'}
+                        </button>
+                        <button 
+                          onClick={exportPatientStats}
+                          className="px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                          <Download size={14} />
+                          Xuất danh sách ({formattedPatientData.length})
+                        </button>
+                      </div>
                     </div>
+
+                    {syncStatus && (
+                      <div className={`mx-5 mt-4 p-4 rounded-xl border ${
+                        syncStatus.error ? 'bg-red-50 border-red-100 text-red-700' : 'bg-blue-50 border-blue-100 text-blue-700'
+                      }`}>
+                        <div className="flex items-start gap-3">
+                          {syncStatus.error ? <ShieldAlert size={18} className="flex-shrink-0" /> : <CheckCircle2 size={18} className="flex-shrink-0" />}
+                          <div className="flex-1">
+                            <p className="text-xs font-bold">{syncStatus.error || syncStatus.success}</p>
+                            {syncStatus.duplicates && syncStatus.duplicates.length > 0 && (
+                              <div className="mt-2 text-[10px] bg-white/50 p-2 rounded-lg border border-blue-100">
+                                <p className="font-bold mb-1 uppercase tracking-wider">Cảnh báo trùng lặp ({syncStatus.duplicates.length} mã BN):</p>
+                                <p className="opacity-80 leading-relaxed max-h-20 overflow-y-auto">
+                                  Hệ thống đã phát hiện và cập nhật thông tin cho các mã: {syncStatus.duplicates.join(', ')}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          <button onClick={() => setSyncStatus(null)} className="text-slate-400 hover:text-slate-600">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="overflow-x-auto max-h-[500px] no-scrollbar">
                       <table className="w-full text-left border-collapse">
                         <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">

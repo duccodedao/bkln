@@ -1,21 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, EmailAuthProvider, PhoneAuthProvider } from 'firebase/auth';
-import { getFirestore, initializeFirestore } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCLCcgaoW9gNYhKk0c0gDWC6i5mKVTN4XE",
-  authDomain: "profile-d1214.firebaseapp.com",
-  projectId: "profile-d1214",
-  storageBucket: "profile-d1214.firebasestorage.app",
-  messagingSenderId: "914980131889",
-  appId: "1:914980131889:web:72f8da15c42dbee671b110",
-  measurementId: "G-C587M69LZW"
-};
+import { initializeFirestore } from 'firebase/firestore';
+import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
-});
+}, (firebaseConfig as any).firestoreDatabaseId || '(default)');
 export const googleProvider = new GoogleAuthProvider();
 export const emailProvider = new EmailAuthProvider();

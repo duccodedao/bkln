@@ -1,0 +1,32 @@
+{
+  "entities": {
+    "PatientStats2026": {
+      "title": "Patient Stats 2026",
+      "description": "Stats for patients visiting the station in 2026",
+      "type": "object",
+      "properties": {
+        "Stt": { "type": "number" },
+        "Mã BN": { "type": "string" },
+        "Họ tên (*)": { "type": "string" },
+        "Giới tính (*)": { "type": "string" },
+        "Năm sinh (*)": { "type": "string" },
+        "Mã BHYT (*)": { "type": "string" },
+        "Số CMT/CCCD (*)": { "type": "string" },
+        "Số điện thoại": { "type": "string" },
+        "Địa chỉ": { "type": "string" },
+        "Xã/Phường/Thị trấn (*)": { "type": "string" },
+        "Ngày khám (*)": { "type": "string" },
+        "Phân loại BN (*)": { "type": "string" },
+        "syncAt": { "type": "string", "format": "date-time" },
+        "syncedBy": { "type": "string" }
+      },
+      "required": ["Mã BN", "Họ tên (*)"]
+    }
+  },
+  "firestore": {
+    "/patients_2026/{patientId}": {
+      "schema": "PatientStats2026",
+      "description": "Collection of patient visit statistics for 2026"
+    }
+  }
+}

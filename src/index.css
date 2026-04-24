@@ -4,10 +4,22 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --animate-progress: progress 2s ease-in-out infinite;
+  --animate-scan: scan 4s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
 
   @keyframes progress {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
+  }
+
+  @keyframes scan {
+    0% { background-position: 0% -100%; }
+    100% { background-position: 0% 100%; }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
   }
 }
 
