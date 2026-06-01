@@ -1,5 +1,5 @@
 {
-const firebaseConfig = {
+
   apiKey: "AIzaSyCLCcgaoW9gNYhKk0c0gDWC6i5mKVTN4XE",
   authDomain: "profile-d1214.firebaseapp.com",
   databaseURL: "https://profile-d1214-default-rtdb.firebaseio.com",
