@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileOutput, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw, ShieldCheck, Check, LogIn, Menu, X, Search, Wind } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileUp, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw, ShieldCheck, Check, LogIn, Menu, X, Search, Wind, Plus, Save, FileJson, Eye, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, Sector } from 'recharts';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AdminPanel from './components/AdminPanel';
 import Login from './components/Login';
-
 import { auth, db } from './firebase';
-import { collection, doc, setDoc, getDocs, writeBatch, query, where, serverTimestamp, getDocFromServer } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, writeBatch, query, where, serverTimestamp, getDocFromServer, addDoc, orderBy, deleteDoc } from 'firebase/firestore';
 
 const THA_COLUMNS = [
   'Họ tên (*)', 'Giới tính (*)', 'Năm sinh (*)', 'Mã BHYT (*)', 'Số CMT/CCCD (*)',
@@ -31,24 +31,135 @@ const DTD_COLUMNS = [
   'Biến chứng', 'Kết quả điều trị', 'Ngày tái khám'
 ];
 
-const SCREENING_COLUMNS = [
-  'Họ tên (*)', 'Giới tính (*)', 'Năm sinh (*)', 'Tuổi', 'Gia đình mắc ĐTD', 
-  'Chiều cao', 'Cân nặng', 'BMI', 'Vòng eo', 'HA tâm thu (*)', 'HA tâm trương (*)',
-  'Điểm Giới tính', 'Điểm Tuổi', 'Điểm Gia đình', 'Điểm BMI', 'Điểm Vòng eo', 'Điểm Huyết áp', 'Tổng điểm',
-  'Nguy cơ Đái tháo đường', 'Nghi ngờ Tăng huyết áp'
-];
-
 const COPD_COLUMNS = [
   'Họ tên (*)', 'Giới tính (*)', 'Năm sinh (*)', 'Tuổi',
   'Hen-C1', 'Hen-C2', 'Hen-C3', 'Hen-C4', 'Hen-C5', 'Hen-C6', 'Hen-C7', 'Nghi ngờ Hen',
   'COPD-C1', 'COPD-C2', 'COPD-C3', 'COPD-C4', 'COPD-C5', 'Nghi ngờ COPD'
 ];
 
-import { AdvancedConverter } from './components/AdvancedConverter';
+const SCREENING_COLUMNS = [
+  'Họ tên (*)', 'Giới tính (*)', 'Năm sinh (*)', 'Mã BHYT (*)', 'Số CMT/CCCD (*)',
+  'Số điện thoại', 'Địa chỉ', 'Xã/Phường/Thị trấn (*)', 'Ngày khám (*)',
+  'Chiều cao', 'Cân nặng', 'Vòng bụng', 'BMI', 'Huyết áp', 'Đường huyết',
+  'Tiền sử gia đình THA', 'Tiền sử gia đình ĐTD', 'Hút thuốc', 'Ăn mặn',
+  'Ít vận động', 'Rượu bia', 'Kết luận THA', 'Kết luận ĐTD', 'Kết luận COPD/Hen'
+];
+
 import { 
-  FileUp, LayoutGrid, ChevronDown, CheckCircle2,
+  LayoutGrid, ChevronDown, CheckCircle2,
   Table, Activity as ActivityIcon, ArrowLeft
 } from 'lucide-react';
+
+
+const parseAgeValue = (val: any) => {
+  if (val === undefined || val === null || val === '') return NaN;
+  const s = String(val).toLowerCase().trim();
+  if (s === 'khống' || s === 'không' || s === '-') return NaN;
+  
+  if (s.includes('tháng')) {
+    const monthMatch = s.match(/\d+/);
+    if (monthMatch) {
+      const months = parseInt(monthMatch[0], 10);
+      return Math.floor(months / 12);
+    }
+  }
+  
+  const numMatch = s.match(/\d+/);
+  if (numMatch) {
+    const n = parseInt(numMatch[0], 10);
+    if (n > 150 && n < 1900) return NaN; // Typo or invalid
+    if (n >= 1900 && n < 2100) return NaN; // Likely birth year
+    return n;
+  }
+  return NaN;
+};
+
+const extractAgeAndGender = (row: any, currentYear: number) => {
+  const getVal = (r: any, keys: string[]) => {
+    for (const key of keys) {
+      if (r[key] !== undefined && r[key] !== null && r[key] !== '') return r[key];
+    }
+    return '';
+  };
+
+  const namVal = getVal(row, ['NAM', 'Nam', 'Male']);
+  const nuVal = getVal(row, ['NU', 'Nữ', 'Female']);
+  const tuoiVal = getVal(row, ['Tuổi', 'TUOI', 'Age']);
+  const namSinhVal = getVal(row, ['Năm sinh (*)', 'NAM_SINH', 'Năm sinh', 'BirthYear', 'YearOfBirth']);
+
+  let age = NaN;
+  let birthYear = '';
+  let gender = '';
+
+  // Process age from specific columns
+  const valToAge = (v: any) => {
+    const parsed = parseAgeValue(v);
+    return isNaN(parsed) ? null : parsed;
+  };
+
+  // Try columns in priority
+  let parsedAge = valToAge(tuoiVal);
+  if (parsedAge === null) parsedAge = valToAge(namVal);
+  if (parsedAge === null) parsedAge = valToAge(nuVal);
+  
+  if (parsedAge !== null) {
+    age = parsedAge;
+  } else {
+    // Try birth year from columns
+    const findYear = (v: any) => {
+      const s = String(v || '');
+      const m = s.match(/\d{4}/);
+      if (m) {
+        const y = parseInt(m[0], 10);
+        if (y > 1900 && y <= currentYear) return String(y);
+      }
+      return null;
+    };
+    birthYear = findYear(namSinhVal) || findYear(namVal) || findYear(nuVal) || findYear(tuoiVal) || '';
+  }
+
+  // Finalize age/birthYear link
+  if (!isNaN(age) && !birthYear) {
+    birthYear = String(currentYear - age);
+  } else if (isNaN(age) && birthYear) {
+    age = currentYear - parseInt(birthYear, 10);
+  }
+
+  // Gender extraction
+  if (namVal !== '' && parseAgeValue(namVal) !== null) gender = 'Nam';
+  else if (nuVal !== '' && parseAgeValue(nuVal) !== null) gender = 'Nữ';
+  else if (namVal !== '' && String(namVal).toLowerCase().includes('nam')) gender = 'Nam';
+  else if (nuVal !== '' && String(nuVal).toLowerCase().includes('nữ')) gender = 'Nữ';
+  else {
+    const gt = String(getVal(row, ['GIOI_TINH', 'Giới tính', 'Gender'])).toLowerCase();
+    if (gt.includes('nam') || gt === '1' || gt === '01') gender = 'Nam';
+    else if (gt.includes('nữ') || gt.includes('nu') || gt === '2' || gt === '02') gender = 'Nữ';
+  }
+
+  return { age, birthYear, gender };
+};
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!text) return;
+    navigator.clipboard.writeText(String(text));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button 
+      onClick={handleCopy}
+      className="p-1 hover:bg-slate-100 rounded-md transition-all text-slate-400 hover:text-blue-600 inline-flex items-center ml-1 active:scale-90"
+      title="Sao chép"
+    >
+      {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+    </button>
+  );
+}
 
 function AdministrativeUnitModal({ onSelect, onClose }: { onSelect: (code: string) => void, onClose: () => void }) {
   const [manualCode, setManualCode] = useState('');
@@ -89,19 +200,180 @@ function AdministrativeUnitModal({ onSelect, onClose }: { onSelect: (code: strin
   );
 }
 
-function DownloadOptionsModal({ onConfirm, onClose }: { onConfirm: (tha: boolean, dtd: boolean, over40: boolean, over50: boolean, screening: boolean, copd: boolean) => void, onClose: () => void }) {
+function AbbreviatedText({ text, title }: { text: string, title: string }) {
+  const [showFull, setShowFull] = useState(false);
+  
+  if (!text) return <span className="text-slate-300">-</span>;
+  
+  const isLong = String(text).length > 20;
+  const displayValue = isLong ? `${String(text).substring(0, 20)}...` : text;
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[11px] text-slate-600">{displayValue}</span>
+      {isLong && (
+        <button 
+          onClick={() => setShowFull(true)}
+          className="p-1 hover:bg-blue-50 text-blue-500 rounded transition-all shrink-0"
+          title="Xem chi tiết"
+        >
+          <Info size={12} />
+        </button>
+      )}
+      
+      {showFull && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4" onClick={() => setShowFull(false)}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">{title}</h4>
+              <button onClick={() => setShowFull(false)} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={16} className="text-slate-500" />
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-auto">
+              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                {String(text)}
+              </p>
+            </div>
+            <div className="flex justify-end pt-2">
+              <button 
+                onClick={() => setShowFull(false)}
+                className="px-4 py-1.5 bg-slate-100 text-slate-600 rounded-lg font-bold text-[10px] uppercase tracking-widest hover:bg-slate-200"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgeGroupModal({ title, data, onClose }: { title: string, data: any[], onClose: () => void }) {
+  const exportToExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, "DanhSach");
+    XLSX.writeFile(wb, `Danh_sach_benh_nhan_${title.replace(/\s+/g, '_')}.xlsx`);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-[2.5rem] shadow-2xl w-[calc(100vw-2cm)] h-[calc(100vh-2cm)] flex flex-col overflow-hidden relative"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-8 border-b border-slate-100">
+          <div>
+            <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+              <Users size={28} className="text-blue-600" />
+              Danh sách bệnh nhân {title}
+            </h3>
+            <p className="text-xs text-slate-500 font-bold mt-2 uppercase tracking-[0.2em]">
+              Tổng cộng: {data.length} đối tượng
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={exportToExcel}
+              className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+            >
+              <Download size={16} />
+              Xuất Excel
+            </button>
+            <button onClick={onClose} className="p-3 hover:bg-slate-100 rounded-full transition-colors">
+              <X size={24} className="text-slate-500" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto p-8">
+          <div className="rounded-2xl border border-slate-100 overflow-x-auto shadow-sm">
+            <table className="w-full text-left border-collapse min-w-[1500px]">
+              <thead className="sticky top-0 bg-slate-50 z-10 shadow-sm">
+                <tr>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b">Họ tên</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b text-center">Giới tính</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b text-center">Năm sinh</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b">Địa chỉ</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b">Mã BHYT</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b text-center">Ngày khám</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b text-center">HA Tâm thu</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b text-center">HA Tâm trương</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b text-center">Cân nặng</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b text-center">Chiều cao</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b">Chẩn đoán</th>
+                  <th className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b">Thuốc</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 bg-white">
+                {data.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-blue-50/30 transition-colors group">
+                    <td className="px-6 py-4 text-[12px] font-bold text-slate-700 flex items-center whitespace-nowrap">
+                      {row['Họ tên (*)']}
+                      <CopyButton text={row['Họ tên (*)']} />
+                    </td>
+                    <td className="px-6 py-4 text-[12px] text-slate-600 text-center">{String(row['Giới tính (*)']).includes('Nam') || row['Giới tính (*)'] === '01' ? 'Nam' : 'Nữ'}</td>
+                    <td className="px-6 py-4 text-[12px] text-slate-600 text-center">{row['Năm sinh (*)']}</td>
+                    <td className="px-6 py-4 text-[12px] text-slate-600 max-w-[200px] truncate">{row['Địa chỉ'] || row['Xã/Phường/Thị trấn (*)'] || '-'}</td>
+                    <td className="px-6 py-4 text-[12px] font-mono text-blue-600">
+                      <div className="flex items-center">
+                        {row['Mã BHYT (*)'] || '-'}
+                        {row['Mã BHYT (*)'] && <CopyButton text={row['Mã BHYT (*)']} />}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-[12px] text-slate-600 text-center">{row['Ngày khám (*)'] || '-'}</td>
+                    <td className="px-6 py-4 text-[12px] text-slate-600 text-center font-bold">{row['HA_TAM_THU'] || row['Huyết áp']?.split('/')[0] || '-'}</td>
+                    <td className="px-6 py-4 text-[12px] text-slate-600 text-center font-bold">{row['HA_TAM_TRUONG'] || row['Huyết áp']?.split('/')[1] || '-'}</td>
+                    <td className="px-6 py-4 text-[12px] text-slate-600 text-center">{row['Cân nặng'] || '-'}</td>
+                    <td className="px-6 py-4 text-[12px] text-slate-600 text-center">{row['Chiều cao'] || '-'}</td>
+                    <td className="px-6 py-4">
+                      <AbbreviatedText 
+                        text={row['Kết luận THA'] || row['Kết luận ĐTD'] || row['Kết luận COPD/Hen'] || row['Ghi chú'] || '-'} 
+                        title="Chẩn đoán chi tiết" 
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <AbbreviatedText 
+                        text={row['THUOC_DIEU_TRI'] || '-'} 
+                        title="Thuốc điều trị" 
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="p-8 border-t border-slate-100 flex justify-end bg-slate-50/50">
+          <button 
+            onClick={onClose}
+            className="px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-slate-50 transition-all shadow-sm"
+          >
+            Đóng cửa sổ
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function DownloadOptionsModal({ onConfirm, onClose }: { onConfirm: (tha: boolean, dtd: boolean, over40: boolean, over50: boolean, copd: boolean) => void, onClose: () => void }) {
   const [tha, setTha] = useState(true);
   const [dtd, setDtd] = useState(true);
   const [over40, setOver40] = useState(false);
   const [over50, setOver50] = useState(false);
-  const [screening, setScreening] = useState(false);
   const [copd, setCopd] = useState(false);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl overflow-y-auto max-h-[90vh]">
         <h3 className="text-xl font-bold mb-4 flex items-center">
-          <FileOutput className="mr-2 text-blue-600" />
+          <FileUp className="mr-2 text-blue-600" />
           Tùy chọn tải xuống
         </h3>
         <p className="text-sm text-gray-500 mb-6">Vui lòng chọn các loại file muốn tải:</p>
@@ -152,17 +424,6 @@ function DownloadOptionsModal({ onConfirm, onClose }: { onConfirm: (tha: boolean
           </button>
 
           <button 
-            onClick={() => setScreening(!screening)}
-            className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${screening ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-600'}`}
-          >
-            <div className="flex items-center">
-              <Search size={18} className="mr-2" />
-              <span className="font-medium">Sàng lọc THA & ĐTĐ</span>
-            </div>
-            {screening ? <CheckSquare size={20} /> : <Square size={20} />}
-          </button>
-
-          <button 
             onClick={() => setCopd(!copd)}
             className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${copd ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 text-gray-600'}`}
           >
@@ -177,8 +438,8 @@ function DownloadOptionsModal({ onConfirm, onClose }: { onConfirm: (tha: boolean
         <div className="flex space-x-3">
           <button onClick={onClose} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200">Hủy</button>
           <button 
-            onClick={() => onConfirm(tha, dtd, over40, over50, screening, copd)} 
-            disabled={!tha && !dtd && !over40 && !over50 && !screening && !copd}
+            onClick={() => onConfirm(tha, dtd, over40, over50, copd)} 
+            disabled={!tha && !dtd && !over40 && !over50 && !copd}
             className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
           >
             Tải xuống
@@ -312,7 +573,7 @@ function MainApp() {
   const [showAdminUnit, setShowAdminUnit] = useState(false);
   const [showDownloadOptions, setShowDownloadOptions] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
-  const [showAdvancedConverter, setShowAdvancedConverter] = useState(false);
+  const [activeView, setActiveView] = useState<'converter' | 'data-management'>('converter');
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
 
   const [inputData, setInputData] = useState<any[]>([]);
@@ -320,10 +581,11 @@ function MainApp() {
   const [outputDataDTD, setOutputDataDTD] = useState<any[]>([]);
   const [outputDataScreening, setOutputDataScreening] = useState<any[]>([]);
   const [outputDataCOPD, setOutputDataCOPD] = useState<any[]>([]);
+  const [outputDataAll, setOutputDataAll] = useState<any[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<'THA' | 'DTD' | 'OVER40' | 'OVER50' | 'SCREENING' | 'COPD' | 'MANIFEST'>('THA');
+  const [activeTab, setActiveTab] = useState<'THA' | 'DTD' | 'OVER40' | 'OVER50' | 'COPD' | 'MANIFEST'>('THA');
   const [displayLimit, setDisplayLimit] = useState(50);
   const [displayLimitPatient, setDisplayLimitPatient] = useState(50);
   const [processProgress, setProcessProgress] = useState(0);
@@ -337,11 +599,15 @@ function MainApp() {
   const [bsMax, setBsMax] = useState<string>('');
   const [showBsConfig, setShowBsConfig] = useState(false);
   const [adminUnitCode, setAdminUnitCode] = useState('');
-  const [removeDuplicates, setRemoveDuplicates] = useState(false);
+  const [removeDuplicates, setRemoveDuplicates] = useState(true);
   const [randomFamilyHistory, setRandomFamilyHistory] = useState(false);
   const [randomHeightWeight, setRandomHeightWeight] = useState(false);
   const [randomBP, setRandomBP] = useState(false);
   const [randomCOPD, setRandomCOPD] = useState(false);
+  const [showAgeStats, setShowAgeStats] = useState(false);
+  const [showDetailedAgeList, setShowDetailedAgeList] = useState(false);
+  const [showDetailedGender, setShowDetailedGender] = useState(false);
+  const [statRemoveDuplicates, setStatRemoveDuplicates] = useState(true);
 
   useEffect(() => {
     setDisplayLimit(50);
@@ -381,22 +647,11 @@ function MainApp() {
         const haThapExtract = getVal(row, ['Huyết áp thấp', 'HA_THAP', 'HA_TAM_TRUONG', 'HA tâm trương']);
 
         if (!maBN) return; // Skip if no ID
-
-        // Age calculation
-        let birthYear = '';
-        let gender = 'Không rõ';
-        if (namVal !== '') { gender = 'Nam'; birthYear = String(namVal); }
-        else if (nuVal !== '') { gender = 'Nữ'; birthYear = String(nuVal); }
-        else if (namSinhVal !== '') { birthYear = String(namSinhVal); }
         
-        if (birthYear && birthYear.length > 4) {
-           const match = birthYear.match(/\d{4}/);
-           if (match) birthYear = match[0];
-        }
-        const age = birthYear ? currentYear - parseInt(birthYear, 10) : (tuoiVal ? parseInt(String(tuoiVal), 10) : 0);
+        const { age, birthYear, gender } = extractAgeAndGender(row, currentYear);
 
         let ageGroup = 'Không rõ';
-        if (age > 0) {
+        if (!isNaN(age) && age >= 0) {
            if (age < 40) ageGroup = '< 40 tuổi';
            else if (age <= 49) ageGroup = '40-49 tuổi';
            else if (age <= 59) ageGroup = '50-59 tuổi';
@@ -404,8 +659,8 @@ function MainApp() {
         }
 
         const diagStr = String(diag).toUpperCase();
-        const hasTHA = diagStr.includes('I10') || diagStr.includes('I11') || diagStr.includes('I12') || diagStr.includes('I13') || diagStr.includes('I15');
-        const hasDTD = diagStr.includes('E10') || diagStr.includes('E11') || diagStr.includes('E12') || diagStr.includes('E13') || diagStr.includes('E14');
+        const hasTHA = diagStr.includes('I10');
+        const hasDTD = diagStr.includes('E11.9');
         
         let dateVal = 0;
         let isCurrentYear = false;
@@ -548,9 +803,9 @@ function MainApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sectionFileInputRef = useRef<HTMLInputElement>(null);
 
-  const isAdmin = profile?.role === 'admin' || profile?.email === 'sonlyhongduc@gmail.com';
+  const isAdmin = profile?.role === 'admin' || profile?.email === 'sonlyhongduc@gmail.com' || user?.email === 'sonlyhongduc@gmail.com';
   const isSubAdmin = profile?.role === 'subadmin';
-  const isAuthorized = isAdmin || isSubAdmin;
+  const isAuthorized = user && profile && !profile.isBlocked;
   const hasPremiumAccess = true; 
   const hasAdvancedAccess = isAdmin; 
 
@@ -560,6 +815,7 @@ function MainApp() {
     const dtdData: any[] = [];
     const screeningData: any[] = [];
     const copdData: any[] = [];
+    const allData: any[] = [];
 
     const getVal = (row: any, keys: string[]) => {
       for (const key of keys) {
@@ -582,59 +838,22 @@ function MainApp() {
     };
 
     data.forEach((row, index) => {
+      const { age, birthYear, gender: extractedGender } = extractAgeAndGender(row, currentYear);
       let gender = '';
-      let birthYear = '';
-      
-      const namVal = getVal(row, ['NAM', 'Nam', 'Male']);
-      const nuVal = getVal(row, ['NU', 'Nữ', 'Female']);
-      const gioiTinhVal = getVal(row, ['GIOI_TINH', 'Giới tính', 'Gender']);
-      const namSinhVal = getVal(row, ['NAM_SINH', 'Năm sinh', 'BirthYear', 'YearOfBirth']);
-      const tuoiVal = getVal(row, ['TUOI', 'Tuổi', 'Age']);
+      let isMale = extractedGender === 'Nam';
 
-      let isMale = false;
-      if (namVal !== '') {
-        isMale = true;
+      if (extractedGender === 'Nam') {
         gender = currentGenderFormat === 'number' ? '01' : 'Nam';
-        const age = parseInt(namVal, 10);
-        if (!isNaN(age) && age < 150) birthYear = String(currentYear - age);
-        else birthYear = String(namVal);
-      } else if (nuVal !== '') {
-        isMale = false;
+      } else if (extractedGender === 'Nữ') {
         gender = currentGenderFormat === 'number' ? '02' : 'Nữ';
-        const age = parseInt(nuVal, 10);
-        if (!isNaN(age) && age < 150) birthYear = String(currentYear - age);
-        else birthYear = String(nuVal);
-      } else if (gioiTinhVal !== '') {
-        const gt = String(gioiTinhVal).toLowerCase();
-        if (gt.includes('nam') || gt === '1' || gt === 'm' || gt === 'male') {
-          isMale = true;
-          gender = currentGenderFormat === 'number' ? '01' : 'Nam';
-        } else if (gt.includes('nữ') || gt.includes('nu') || gt === '2' || gt === 'f' || gt === 'female') {
-          isMale = false;
-          gender = currentGenderFormat === 'number' ? '02' : 'Nữ';
-        }
-      }
-
-      if (birthYear === '') {
-        if (namSinhVal !== '') {
-          birthYear = String(namSinhVal);
-        } else if (tuoiVal !== '') {
-          const age = parseInt(tuoiVal, 10);
-          if (!isNaN(age)) birthYear = String(currentYear - age);
-        }
-      }
-
-      if (birthYear.length > 4) {
-        const match = birthYear.match(/\d{4}/);
-        if (match) birthYear = match[0];
       }
 
       const formattedBirthYear = birthYear && birthYear.length === 4 ? `01/01/${birthYear}` : birthYear;
-      const age = birthYear ? currentYear - parseInt(birthYear, 10) : 0;
 
       const diagnosis = getVal(row, ['CHAN_DOAN', 'Chẩn đoán', 'MA_BENH', 'ICD10']) || '';
-      const hasTHA = diagnosis.includes('I10') || diagnosis.includes('I11') || diagnosis.includes('I12') || diagnosis.includes('I13') || diagnosis.includes('I15');
-      const hasDTD = diagnosis.includes('E10') || diagnosis.includes('E11') || diagnosis.includes('E12') || diagnosis.includes('E13') || diagnosis.includes('E14');
+      const diagStr = String(diagnosis).toUpperCase();
+      const hasTHA = diagStr.includes('I10') || diagStr.includes('I11') || diagStr.includes('I12') || diagStr.includes('I13') || diagStr.includes('I15');
+      const hasDTD = diagStr.includes('E11.9') || diagStr.includes('E119') || diagStr.includes('E10') || diagStr.includes('E11') || diagStr.includes('E12') || diagStr.includes('E13') || diagStr.includes('E14');
 
       // 1. Original Values
       let weightRaw = getVal(row, ['CAN_NANG', 'Cân nặng', 'Weight']);
@@ -703,6 +922,8 @@ function MainApp() {
         'Kết quả điều trị': getVal(row, ['KET_QUA_DIEU_TRI', 'Kết quả điều trị']) || '',
         'Ngày tái khám': getVal(row, ['NGAY_TAI_KHAM', 'Ngày tái khám'])
       };
+
+      allData.push(commonFields);
 
       if (hasTHA) {
         thaData.push({
@@ -820,7 +1041,7 @@ function MainApp() {
       }
     });
 
-    return { thaData, dtdData, screeningData, copdData };
+    return { thaData, dtdData, screeningData, copdData, allData };
   };
 
   const processFile = (file: File) => {
@@ -854,11 +1075,12 @@ function MainApp() {
 
         setInputData(jsonData);
         setProcessProgress(75);
-        const { thaData, dtdData, screeningData, copdData } = transformData(jsonData, genderFormat, adminUnitCode);
+        const { thaData, dtdData, screeningData, copdData, allData } = transformData(jsonData, genderFormat, adminUnitCode);
         setOutputDataTHA(thaData);
         setOutputDataDTD(dtdData);
         setOutputDataScreening(screeningData);
         setOutputDataCOPD(copdData);
+        setOutputDataAll(allData);
         
         if (thaData.length > 0) setActiveTab('THA');
         else if (dtdData.length > 0) setActiveTab('DTD');
@@ -988,6 +1210,7 @@ function MainApp() {
     setOutputDataDTD(updateUnit(outputDataDTD));
     setOutputDataScreening(updateUnit(outputDataScreening));
     setOutputDataCOPD(updateUnit(outputDataCOPD));
+    setOutputDataAll(updateUnit(outputDataAll));
   };
 
   const handleApplyFilters = () => {
@@ -998,11 +1221,12 @@ function MainApp() {
 
   useEffect(() => {
     if (inputData.length > 0) {
-      const { thaData, dtdData, screeningData, copdData } = transformData(inputData, genderFormat, adminUnitCode);
+      const { thaData, dtdData, screeningData, copdData, allData } = transformData(inputData, genderFormat, adminUnitCode);
       setOutputDataTHA(thaData);
       setOutputDataDTD(dtdData);
       setOutputDataScreening(screeningData);
       setOutputDataCOPD(copdData);
+      setOutputDataAll(allData);
     }
   }, [genderFormat, adminUnitCode, randomFamilyHistory, randomHeightWeight, randomBP, randomCOPD, inputData]);
 
@@ -1016,11 +1240,12 @@ function MainApp() {
     
     // Re-transform data to original state
     if (inputData.length > 0) {
-      const { thaData, dtdData, screeningData, copdData } = transformData(inputData, 'text', '');
+      const { thaData, dtdData, screeningData, copdData, allData } = transformData(inputData, 'text', '');
       setOutputDataTHA(thaData);
       setOutputDataDTD(dtdData);
       setOutputDataScreening(screeningData);
       setOutputDataCOPD(copdData);
+      setOutputDataAll(allData);
     }
     
     setError('Đã xóa tất cả bộ lọc.');
@@ -1046,6 +1271,7 @@ function MainApp() {
     setOutputDataDTD(updateGender(outputDataDTD));
     setOutputDataScreening(updateGender(outputDataScreening));
     setOutputDataCOPD(updateGender(outputDataCOPD));
+    setOutputDataAll(updateGender(outputDataAll));
   };
 
   const handleApplyBloodSugar = () => {
@@ -1193,42 +1419,46 @@ function MainApp() {
   const baseFilteredDTD = getBaseFilteredData(outputDataDTD);
   const baseFilteredScreening = getBaseFilteredData(outputDataScreening);
   const baseFilteredCOPD = getBaseFilteredData(outputDataCOPD);
+  const baseFilteredAll = getBaseFilteredData(outputDataAll);
 
   const filteredTHA = applyDuplicateRemoval(baseFilteredTHA);
   const filteredDTD = applyDuplicateRemoval(baseFilteredDTD);
   const filteredScreening = applyDuplicateRemoval(baseFilteredScreening);
   const filteredCOPD = applyDuplicateRemoval(baseFilteredCOPD);
+  const filteredAll = applyDuplicateRemoval(baseFilteredAll);
 
   const currentYear = new Date().getFullYear();
+
+  const getAgeFromRow = (row: any) => {
+    const { age } = extractAgeAndGender(row, currentYear);
+    return age;
+  };
+
   const over40List = useMemo(() => {
-    const allData = [...filteredTHA, ...filteredDTD];
+    const allData = filteredAll;
     const uniqueMap = new Map<string, any>();
     allData.forEach(row => {
       const bhyt = String(row['Mã BHYT (*)'] || '').trim();
-      const namSinhStr = String(row['Năm sinh (*)'] || '');
-      const match = namSinhStr.match(/\d{4}/);
-      const birthYear = match ? parseInt(match[0], 10) : NaN;
-      if (bhyt && !isNaN(birthYear) && (currentYear - birthYear) >= 40) {
+      const age = getAgeFromRow(row);
+      if (bhyt && !isNaN(age) && age >= 40) {
         uniqueMap.set(bhyt, row);
       }
     });
     return Array.from(uniqueMap.values());
-  }, [filteredTHA, filteredDTD, currentYear]);
+  }, [filteredAll, currentYear]);
 
   const over50List = useMemo(() => {
-    const allData = [...filteredTHA, ...filteredDTD];
+    const allData = filteredAll;
     const uniqueMap = new Map<string, any>();
     allData.forEach(row => {
       const bhyt = String(row['Mã BHYT (*)'] || '').trim();
-      const namSinhStr = String(row['Năm sinh (*)'] || '');
-      const match = namSinhStr.match(/\d{4}/);
-      const birthYear = match ? parseInt(match[0], 10) : NaN;
-      if (bhyt && !isNaN(birthYear) && (currentYear - birthYear) >= 50) {
+      const age = getAgeFromRow(row);
+      if (bhyt && !isNaN(age) && age >= 50) {
         uniqueMap.set(bhyt, row);
       }
     });
     return Array.from(uniqueMap.values());
-  }, [filteredTHA, filteredDTD, currentYear]);
+  }, [filteredAll, currentYear]);
 
   const currentBaseData = activeTab === 'THA' ? baseFilteredTHA : 
                           activeTab === 'DTD' ? baseFilteredDTD : 
@@ -1236,6 +1466,132 @@ function MainApp() {
                           activeTab === 'COPD' ? baseFilteredCOPD : 
                           baseFilteredTHA; // fallback
   const duplicateStats = getDuplicateStats(currentBaseData);
+
+  const [showAllAgesInStats, setShowAllAgesInStats] = useState(false);
+  const [selectedAgeForModal, setSelectedAgeForModal] = useState<number | null>(null);
+  const [selectedGroupForModal, setSelectedGroupForModal] = useState<{ label: string, data: any[] } | null>(null);
+  const [showAgeGroupModal, setShowAgeGroupModal] = useState(false);
+
+  const ageStats = useMemo(() => {
+    const stats = new Map<number, any[]>();
+    
+    // Choose data source based on tab
+    let sourceData: any[] = [];
+    if (activeTab === 'THA') sourceData = filteredTHA;
+    else if (activeTab === 'DTD') sourceData = filteredDTD;
+    else if (activeTab === 'COPD') sourceData = filteredCOPD;
+    else if (activeTab === 'SCREENING') sourceData = filteredScreening;
+    else if (activeTab === 'OVER40') sourceData = over40List;
+    else if (activeTab === 'OVER50') sourceData = over50List;
+    else sourceData = filteredAll; // TAB ALL / MANIFEST FULL
+
+    // Apply local deduplication for stats if enabled
+    let finalData = sourceData;
+    if (statRemoveDuplicates) {
+      const uniqueMap = new Map<string, any>();
+      sourceData.forEach(row => {
+        const bhyt = String(row['Mã BHYT (*)'] || '').trim();
+        const name = String(row['Họ tên (*)'] || '').trim();
+        const birthYearStr = String(row['Năm sinh (*)'] || '').trim();
+        const key = bhyt || (name + birthYearStr);
+        if (key && !uniqueMap.has(key)) {
+          uniqueMap.set(key, row);
+        }
+      });
+      finalData = Array.from(uniqueMap.values());
+    }
+
+    finalData.forEach(row => {
+      const age = getAgeFromRow(row);
+      if (!isNaN(age) && age >= 0 && age <= 150) {
+        if (!stats.has(age)) stats.set(age, []);
+        stats.get(age)!.push(row);
+      }
+    });
+    
+    return stats;
+  }, [filteredAll, filteredTHA, filteredDTD, filteredCOPD, filteredScreening, over40List, over50List, activeTab, currentYear, statRemoveDuplicates]);
+
+  const chartData = useMemo(() => {
+    return Array.from(ageStats.keys())
+      .sort((a: number, b: number) => a - b)
+      .map(age => ({
+        age: `${age} tuổi`,
+        count: ageStats.get(age)?.length || 0,
+        ageNum: age
+      }));
+  }, [ageStats]);
+
+  const genderStats = useMemo(() => {
+    const getGenderCounts = (data: any[]) => {
+      let male = 0;
+      let female = 0;
+      data.forEach(row => {
+        const gioitinh = String(row['Giới tính (*)'] || '').trim();
+        if (gioitinh.includes('Nam') || gioitinh === '01') male++;
+        else female++;
+      });
+      return { male, female };
+    };
+
+    // Total unique patients across all filtered lists
+    const allUniqueRows: any[] = [];
+    ageStats.forEach(rows => allUniqueRows.push(...rows));
+    const total = getGenderCounts(allUniqueRows);
+
+    return {
+      total: [
+        { name: 'Nam', value: total.male, color: '#3b82f6' },
+        { name: 'Nữ', value: total.female, color: '#ec4899' }
+      ].filter(d => d.value > 0),
+      breakdown: [
+        { name: 'Sàng lọc', counts: getGenderCounts(filteredScreening), color: '#3b82f6' },
+        { name: 'COPD/Hen', counts: getGenderCounts(filteredCOPD), color: '#10b981' },
+        { name: 'THA', counts: getGenderCounts(filteredTHA), color: '#f59e0b' },
+        { name: 'Đái tháo đường', counts: getGenderCounts(filteredDTD), color: '#ef4444' }
+      ].filter(item => item.counts.male + item.counts.female > 0)
+    };
+  }, [ageStats, filteredScreening, filteredCOPD, filteredTHA, filteredDTD]);
+
+  const ageGroupStats = useMemo(() => {
+    const groups = [
+      { label: 'Dưới 1 tuổi', condition: (age: number) => age < 1 },
+      { label: 'Dưới 5 tuổi', condition: (age: number) => age < 5 },
+      { label: 'Từ 5 tuổi trở lên', condition: (age: number) => age >= 5 },
+      { label: 'Từ 15 tuổi trở lên', condition: (age: number) => age >= 15 },
+      { label: 'Từ 18 tuổi trở lên', condition: (age: number) => age >= 18 },
+      { label: 'Từ 30 tuổi trở lên', condition: (age: number) => age >= 30 },
+      { label: 'Từ 40 tuổi trở lên', condition: (age: number) => age >= 40 },
+      { label: 'Từ 50 tuổi trở lên', condition: (age: number) => age >= 50 },
+      { label: 'Từ 60 tuổi trở lên', condition: (age: number) => age >= 60 },
+      { label: 'Từ 65 tuổi trở lên', condition: (age: number) => age >= 65 },
+      { label: 'Từ 70 tuổi trở lên', condition: (age: number) => age >= 70 },
+      { label: 'Từ 80 tuổi trở lên', condition: (age: number) => age >= 80 },
+      { label: 'Từ 90 tuổi trở lên', condition: (age: number) => age >= 90 },
+    ];
+
+    return groups
+      .map(group => {
+        let count = 0;
+        let maleCount = 0;
+        let femaleCount = 0;
+        let groupData: any[] = [];
+        
+        ageStats.forEach((rows, age) => {
+          if (group.condition(age)) {
+            count += rows.length;
+            groupData = [...groupData, ...rows];
+            rows.forEach(row => {
+              const gioitinh = String(row['Giới tính (*)'] || '').trim();
+              if (gioitinh.includes('Nam') || gioitinh === '01') maleCount++;
+              else femaleCount++;
+            });
+          }
+        });
+        
+        return { ...group, count, maleCount, femaleCount, data: groupData };
+      });
+  }, [ageStats]);
 
   const exportScreeningToExcel = (data: any[], fileName: string) => {
     const wb = XLSX.utils.book_new();
@@ -1964,13 +2320,13 @@ function MainApp() {
                   <button 
                     onClick={() => {
                       setShowSidebar(false);
-                      setShowAdvancedConverter(true);
+                      setActiveView('converter');
                       setShowAdmin(false);
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all font-bold text-xs"
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all font-bold text-xs ${activeView === 'converter' ? 'text-blue-600 bg-blue-50' : 'text-slate-600 hover:text-blue-600 hover:bg-blue-50'}`}
                   >
                     <RefreshCcw size={16} />
-                    Chuyển đổi nâng cao
+                    Chuyển đổi dữ liệu
                   </button>
                 </div>
                 
@@ -1989,20 +2345,22 @@ function MainApp() {
         </AnimatePresence>
 
         <main className="space-y-4 sm:space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 xl:grid-cols-5 gap-4 sm:gap-6">
-            {/* Top Row: Upload & Stats */}
-            <div className="lg:col-span-4 xl:col-span-1">
+          {activeView === 'converter' && (
+            <>
+              <div className="w-full">
+                {/* Top Row: Upload Section Expanded */}
+                <div className="w-full">
               {/* Upload Card */}
-              <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
-                <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+              <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
                   <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
                     <Upload size={16} className="text-blue-600" />
-                    Tải lên dữ liệu
+                    Tải lên dữ liệu nguồn (HIS)
                   </h3>
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={handleDownloadSample}
-                      className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors"
+                      className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 rounded-lg transition-all"
                     >
                       <Download size={14} />
                       Tải file mẫu
@@ -2010,7 +2368,7 @@ function MainApp() {
                     {inputData.length > 0 && (
                       <button 
                         onClick={handleReset}
-                        className="text-[11px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors"
+                        className="text-[11px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1.5 px-3 py-1.5 bg-red-50 rounded-lg transition-all"
                       >
                         <Trash2 size={12} />
                         Làm mới
@@ -2019,10 +2377,10 @@ function MainApp() {
                   </div>
                 </div>
                 
-                <div className="p-3 flex-1 flex flex-col justify-center gap-3">
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div 
-                    className={`relative group border-2 border-dashed rounded-xl p-3 text-center transition-all duration-300 cursor-pointer
-                      ${isDragging ? 'border-blue-500 bg-blue-50/50 scale-[0.98]' : 'border-slate-200 hover:border-blue-400 hover:bg-slate-50/50'}`}
+                    className={`relative group border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 cursor-pointer flex flex-col items-center justify-center min-h-[180px]
+                      ${isDragging ? 'border-blue-500 bg-blue-50/50 scale-[0.99]' : 'border-slate-200 hover:border-blue-400 hover:bg-slate-50/50'}`}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
@@ -2036,226 +2394,103 @@ function MainApp() {
                       className="hidden" 
                     />
                     
-                    <div className="flex flex-col items-center space-y-2">
-                       <div className={`p-3 rounded-xl transition-colors ${isDragging ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
-                        <FileSpreadsheet size={24} />
+                    <div className="flex flex-col items-center space-y-4">
+                       <div className={`p-4 rounded-2xl transition-all duration-500 ${isDragging ? 'bg-blue-100 text-blue-600 scale-110 rotate-12' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 group-hover:rotate-0'}`}>
+                        <FileSpreadsheet size={32} />
                       </div>
-                      <div>
-                        <div className="text-xs font-bold text-slate-700">
+                      <div className="space-y-1">
+                        <div className="text-sm font-bold text-slate-700">
                           {fileName ? (
-                            <div className="space-y-1">
-                              <span className="text-blue-600 truncate max-w-[200px] block">{fileName}</span>
+                            <div className="space-y-2">
+                              <span className="text-blue-600 truncate max-w-[300px] block text-lg">{fileName}</span>
                               {inputData.length > 0 && (
-                                <span className="text-[9px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">
-                                  {inputData.length.toLocaleString()} dòng
-                                </span>
+                                <div className="flex items-center justify-center gap-2">
+                                  <span className="text-[10px] bg-blue-600 text-white px-3 py-1 rounded-full font-black uppercase tracking-wider">
+                                    {inputData.length.toLocaleString()} DÒNG DỮ LIỆU
+                                  </span>
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-black uppercase tracking-wider border border-emerald-200">
+                                    SẴN SÀNG
+                                  </span>
+                                </div>
                               )}
                             </div>
-                          ) : 'Chọn file Excel hoặc CSV'}
+                          ) : (
+                            <span className="text-slate-600">Chọn file Excel hoặc CSV từ máy tính</span>
+                          )}
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-1">Kéo thả file vào vùng này</p>
+                        {!fileName && <p className="text-xs text-slate-400">hoặc kéo thả file vào đây để nạp dữ liệu</p>}
                       </div>
                     </div>
                   </div>
 
-                  {isProcessing && (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50 flex items-start gap-4 h-full">
+                      <div className="p-2 bg-blue-100 rounded-xl text-blue-600 shrink-0">
+                        <Info size={20} />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-black text-blue-900 uppercase tracking-[0.2em]">Yêu cầu nguồn dữ liệu</p>
+                        <p className="text-xs text-blue-800 leading-relaxed">
+                          Hệ thống hỗ trợ nạp dữ liệu trực tiếp từ báo cáo HIS (Sổ khám bệnh lớn 2016). 
+                          Đảm bảo file tải lên giữ nguyên định dạng cột để công cụ có thể phân tách dữ liệu chính xác.
+                        </p>
+                        <div className="pt-2">
+                          <p className="text-[10px] font-bold text-blue-700/60 mb-1.5 uppercase tracking-widest">Đường dẫn HIS tiêu chuẩn:</p>
+                          <code className="bg-white/80 px-2 py-1.5 rounded-lg border border-blue-200 block font-mono text-[10px] text-blue-600 break-all">
+                            https://yte-{"{tỉnh}"}.vnpthis.vn/web_his/Sokhambenhlon2016
+                          </code>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {isProcessing && (
+                  <div className="px-6 pb-6">
                     <motion.div 
-                      initial={{ opacity: 0, y: 15 }}
+                      initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="mt-6 p-6 bg-slate-900 rounded-3xl shadow-2xl relative overflow-hidden group"
+                      className="p-6 bg-slate-900 rounded-2xl shadow-xl relative overflow-hidden group"
                     >
-                      {/* Technical Grid Overlay */}
                       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ 
                         backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
                         backgroundSize: '20px 20px'
                       }} />
                       
-                      {/* Scanning Line Effect */}
-                      <motion.div 
-                        animate={{ top: ['0%', '100%'] }}
-                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                        className="absolute left-0 right-0 h-[2px] bg-blue-500/30 blur-[2px] z-10 pointer-events-none"
-                      />
-
-                      <div className="relative z-20 space-y-5">
+                      <div className="relative z-20 space-y-4">
                         <div className="flex justify-between items-center">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                               <RefreshCcw size={16} className="text-blue-500 animate-[spin_3s_linear_infinite]" />
-                               <span className="text-[10px] font-black text-white uppercase tracking-[0.4em]">Engine Protocol Active</span>
-                            </div>
-                            <p className="text-[9px] font-bold text-slate-500 tracking-wider">SECURE_DATA_SYNCHRONIZATION_MODULE_v2.0</p>
+                          <div className="flex items-center gap-3">
+                             <RefreshCcw size={16} className="text-blue-500 animate-spin" />
+                             <span className="text-[10px] font-black text-white uppercase tracking-[0.3em]">Đang xử lý cấu trúc dữ liệu...</span>
                           </div>
-                          <div className="flex flex-col items-end">
-                            <span className="text-3xl font-black text-white italic">{processProgress}<span className="text-blue-500 text-sm ml-0.5 not-italic">%</span></span>
-                            <div className="h-1 w-8 bg-blue-500 rounded-full mt-1" />
-                          </div>
+                          <span className="text-2xl font-black text-white italic">{processProgress}%</span>
                         </div>
                         
-                        <div className="space-y-2">
-                          <div className="h-3 bg-slate-800 rounded-full overflow-hidden p-[2px]">
-                            <motion.div 
-                              className="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-400 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.6)]"
-                              initial={{ width: 0 }}
-                              animate={{ width: `${processProgress}%` }}
-                              transition={{ duration: 0.8, ease: "easeOut" }}
-                            />
-                          </div>
-                          <div className="flex justify-between items-center px-1">
-                             <div className="flex gap-1.5 items-center">
-                               {[1,2,3].map(i => (
-                                 <motion.div 
-                                   key={i}
-                                   animate={{ opacity: [0.3, 1, 0.3] }}
-                                   transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
-                                   className="w-1 h-1 bg-blue-400 rounded-full"
-                                 />
-                               ))}
-                             </div>
-                             <span className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em] italic">Architectural Compliance Check...</span>
-                          </div>
+                        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                          <motion.div 
+                            className="h-full bg-blue-500 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${processProgress}%` }}
+                          />
                         </div>
                       </div>
                     </motion.div>
-                  )}
+                  </div>
+                )}
 
-                  {error && (
+                {error && (
+                  <div className="px-6 pb-6">
                     <motion.div 
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600"
+                      className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600"
                     >
                       <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
                       <p className="text-xs font-bold leading-relaxed">{error}</p>
                     </motion.div>
-                  )}
-                </div>
-              </section>
-            </div>
-
-            <div className="lg:col-span-8 xl:col-span-4">
-              {/* Stats Section */}
-              <AnimatePresence>
-                {(inputData.length > 0) ? (
-                  <motion.section 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 h-full"
-                  >
-                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-center hover:shadow-md transition-shadow relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <Activity size={80} />
-                      </div>
-                      <div className="flex items-center justify-between relative z-10">
-                        <div className="p-3 bg-blue-50 text-blue-600 rounded-xl shadow-sm">
-                          <Activity size={24} />
-                        </div>
-                        <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">THA</span>
-                      </div>
-                      <div className="relative z-10 pt-2">
-                        <p className="text-4xl font-black text-slate-900 leading-none">
-                          {filteredTHA.length}
-                        </p>
-                        <p className="text-[11px] font-bold text-slate-400 mt-2 uppercase tracking-wide">Bệnh nhân Tăng huyết áp</p>
-                      </div>
-                    </div>
-                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-center hover:shadow-md transition-shadow relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <Droplet size={80} />
-                      </div>
-                      <div className="flex items-center justify-between relative z-10">
-                        <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl shadow-sm">
-                          <Droplet size={24} />
-                        </div>
-                        <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">ĐTĐ</span>
-                      </div>
-                      <div className="relative z-10 pt-2">
-                        <p className="text-4xl font-black text-slate-900 leading-none">
-                          {filteredDTD.length}
-                        </p>
-                        <p className="text-[11px] font-bold text-slate-400 mt-2 uppercase tracking-wide">Bệnh nhân Đái tháo đường</p>
-                      </div>
-                    </div>
-                    <div className="sm:col-span-2 lg:col-span-1 bg-slate-900 p-5 rounded-3xl shadow-xl shadow-slate-200/50 space-y-3 flex flex-col justify-center relative overflow-hidden group">
-                      <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
-                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Users size={80} className="text-white" />
-                      </div>
-                      <div className="flex items-center justify-between relative z-10">
-                        <div className="p-3 bg-slate-800 border border-slate-700 text-slate-300 rounded-xl">
-                          <Users size={24} />
-                        </div>
-                        <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest bg-slate-800/50 border border-slate-700 px-2 py-1 rounded-md">Tổng cộng</span>
-                      </div>
-                      <div className="relative z-10 pt-2">
-                        <p className="text-5xl font-black text-white leading-none">
-                          {filteredTHA.length + filteredDTD.length}
-                        </p>
-                        <p className="text-[11px] font-bold text-slate-400 mt-2 uppercase tracking-wide">
-                          Dữ liệu đã lọc thành công
-                        </p>
-                      </div>
-                    </div>
-                  </motion.section>
-                ) : (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.98, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="h-full min-h-[300px] bg-white border border-slate-100 rounded-[3rem] flex flex-col items-center justify-center p-12 text-center relative overflow-hidden group shadow-sm transition-shadow hover:shadow-md"
-                  >
-                    {/* Architectural Background Pattern */}
-                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ 
-                      backgroundImage: 'radial-gradient(circle at 10px 10px, black 1px, transparent 0)',
-                      backgroundSize: '40px 40px'
-                    }} />
-                    
-                    {/* High-End Decor Elements */}
-                    <motion.div 
-                      animate={{ 
-                        scale: [1, 1.2, 1],
-                        opacity: [0.1, 0.2, 0.1],
-                      }}
-                      transition={{ duration: 10, repeat: Infinity }}
-                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-100 rounded-full blur-[100px]" 
-                    />
-                    
-                    <div className="relative z-10 flex flex-col items-center">
-                      <div className="relative mb-10 group-hover:scale-105 transition-transform duration-700">
-                        <div className="absolute inset-0 bg-blue-600/5 rounded-[2.5rem] scale-125 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className="w-24 h-24 bg-white border border-slate-200 text-slate-300 rounded-[2.5rem] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.1)] flex items-center justify-center relative z-10 rotate-6 transition-transform group-hover:rotate-0 duration-500">
-                          <Database size={40} className="text-slate-900 drop-shadow-sm" />
-                        </div>
-                        {/* Decorative Badge */}
-                        <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-slate-900 border-4 border-white rounded-2xl flex items-center justify-center text-white shadow-xl">
-                           <Lock size={16} />
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-4 max-w-sm">
-                        <h4 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">
-                          Kiến Trúc <span className="text-blue-600">Dữ Liệu</span>
-                        </h4>
-                        <div className="h-[1px] w-12 bg-slate-200 mx-auto" />
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.2em] leading-relaxed">
-                          Hệ thống đã sẵn sàng. <br/>
-                          Vui lòng nạp hồ sơ nguồn để khởi tạo báo cáo.
-                        </p>
-                      </div>
-
-                      <motion.button 
-                        whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => fileInputRef.current?.click()}
-                        className="mt-10 px-8 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] flex items-center gap-3 shadow-2xl shadow-slate-200 hover:bg-slate-800 transition-all"
-                      >
-                        <Upload size={14} />
-                        Nạp dữ liệu ngay
-                      </motion.button>
-                    </div>
-                  </motion.div>
+                  </div>
                 )}
-              </AnimatePresence>
+              </section>
             </div>
           </div>
 
@@ -2365,137 +2600,56 @@ function MainApp() {
                       <div className="space-y-4">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                           <Settings size={14} className="text-blue-600" />
-                          TRẠNG THÁI NÂNG CAO
+                          CẤU HÌNH NÂNG CAO
                         </label>
-                        <div className={`p-4 rounded-2xl border flex items-center gap-3 transition-colors ${hasAdvancedAccess ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
-                          <div className={`p-2 rounded-xl scale-90 ${hasAdvancedAccess ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-200 text-slate-400'}`}>
-                            <ShieldCheck size={18} />
-                          </div>
-                          <div>
-                            <p className={`text-[10px] font-black uppercase tracking-widest ${hasAdvancedAccess ? 'text-indigo-900' : 'text-slate-400'}`}>
-                              Quyền: {hasAdvancedAccess ? 'Admin' : 'Hạn chế'}
-                            </p>
-                            <p className="text-[9px] font-bold text-slate-400 mt-0.5 whitespace-nowrap">
-                              {hasAdvancedAccess ? 'Cho phép truy cập cấu hình AI' : 'Vui lòng nâng cấp tài khoản'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Blood Sugar Config */}
-                      <div className="space-y-6 pt-10 border-t border-slate-100">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Settings size={14} className="text-blue-600" />
-                            Cấu hình Thuật toán Nâng cao
-                          </label>
+                        <div className="grid grid-cols-1 gap-2">
+                          <Toggle 
+                            enabled={removeDuplicates} 
+                            onChange={setRemoveDuplicates} 
+                            label="Loại bỏ trùng lặp" 
+                            description="Tự động gộp hồ sơ cùng BHYT/Họ tên"
+                            icon={Database}
+                          />
                           {hasAdvancedAccess && (
-                            <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 text-[9px] font-black uppercase tracking-widest">
-                              <ShieldCheck size={10} />
-                              Admin Verified
-                            </div>
-                          )}
-                        </div>
-
-                        {hasAdvancedAccess ? (
-                          <div className="space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <>
                               <Toggle 
-                                enabled={removeDuplicates}
-                                onChange={setRemoveDuplicates}
-                                label="Loại bỏ Trùng lặp"
-                                description="Tự động xóa hồ sơ trùng BHYT"
+                                enabled={randomFamilyHistory} 
+                                onChange={setRandomFamilyHistory} 
+                                label="Bù tiền sử" 
+                                description="Ngẫu nhiên Có/Không nếu trống"
                                 icon={Users}
                               />
-                              
-                              <div className="flex flex-col gap-2">
-                                <Toggle 
-                                  enabled={showBsConfig}
-                                  onChange={setShowBsConfig}
-                                  label="Ngẫu nhiên Đường huyết"
-                                  description="Tự động điền theo chỉ số y khoa"
-                                  icon={Droplet}
-                                />
-                                {showBsConfig && (
-                                  <motion.div 
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center gap-3 overflow-hidden"
-                                  >
-                                    <div className="flex-1 grid grid-cols-2 gap-2">
-                                      <input 
-                                        type="number" 
-                                        placeholder="Min" 
-                                        className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" 
-                                        value={bsMin} 
-                                        onChange={e => setBsMin(e.target.value)} 
-                                      />
-                                      <input 
-                                        type="number" 
-                                        placeholder="Max" 
-                                        className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" 
-                                        value={bsMax} 
-                                        onChange={e => setBsMax(e.target.value)} 
-                                      />
-                                    </div>
-                                    <button 
-                                      onClick={handleApplyBloodSugar} 
-                                      className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-                                    >
-                                      <CheckCircle size={18} />
-                                    </button>
-                                  </motion.div>
-                                )}
-                              </div>
-
                               <Toggle 
-                                enabled={randomFamilyHistory}
-                                onChange={setRandomFamilyHistory}
-                                label="Ngẫu nhiên Tiền sử"
-                                description="Tạo dữ liệu gia đình mắc ĐTD"
-                                icon={ActivityIcon}
+                                enabled={randomHeightWeight} 
+                                onChange={setRandomHeightWeight} 
+                                label="Bù Chiều cao/Cân nặng" 
+                                description="Dựa trên BMI chuẩn nếu trống"
+                                icon={Activity}
                               />
-                              <Toggle 
-                                enabled={randomHeightWeight}
-                                onChange={setRandomHeightWeight}
-                                label="Ngẫu nhiên BMI"
-                                description="Cân đối Chiều cao/Cân nặng chuẩn"
-                                icon={LayoutGrid}
-                              />
-                              <Toggle 
-                                enabled={randomBP}
-                                onChange={setRandomBP}
-                                label="Ngẫu nhiên Huyết áp"
-                                description="Gán chỉ số mặc định (120/80)"
-                                icon={ActivityIcon}
-                              />
-                              <Toggle 
-                                enabled={randomCOPD}
-                                onChange={setRandomCOPD}
-                                label="Sàng lọc COPD/Hen"
-                                description="Điền triệu chứng theo độ tuổi"
-                                icon={Wind}
-                              />
-                            </div>
-
-                            <div className="pt-2 border-t border-slate-100 mt-2">
-                              {/* Empty space as requested */}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-10 bg-slate-50 border border-slate-100 border-dashed rounded-[2.5rem] text-center space-y-3">
-                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm">
-                              <Lock size={24} className="text-slate-300" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Quyền truy cập bị hạn chế</p>
-                              <p className="text-[10px] text-slate-300 font-bold uppercase tracking-[0.2em] mt-1">Vui lòng nâng cấp tài khoản Admin để mở khóa cấu hình AI</p>
-                            </div>
-                          </div>
-                        )}
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    {hasAdvancedAccess && (
+                      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                        <Toggle 
+                          enabled={randomBP} 
+                          onChange={setRandomBP} 
+                          label="Bù Huyết áp" 
+                          description="Mặc định 120/80 nếu trống"
+                          icon={Activity}
+                        />
+                        <Toggle 
+                          enabled={randomCOPD} 
+                          onChange={setRandomCOPD} 
+                          label="Bù Triệu chứng COPD" 
+                          description="Mô phỏng triệu chứng lâm sàng"
+                          icon={Wind}
+                        />
+                      </div>
+                    )}
 
                     <div className="mt-10 pt-8 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3 px-2 pb-2">
                       <button 
@@ -2518,6 +2672,7 @@ function MainApp() {
                         Áp dụng tất cả bộ lọc
                       </button>
                     </div>
+                  </div>
                 </section>
 
                 {/* Statistical Summary section */}
@@ -2659,6 +2814,284 @@ function MainApp() {
                   </div>
                 </section>
 
+                {/* Age Statistics Section */}
+                <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                  <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-emerald-50/30">
+                    <div className="flex items-center gap-4">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                        <Users size={18} className="text-emerald-600" />
+                        Thống kê {activeTab === 'THA' ? 'Tăng huyết áp' : 
+                                 activeTab === 'DTD' ? 'Đái tháo đường' :
+                                 activeTab === 'COPD' ? 'COPD & Hen' :
+                                 activeTab === 'SCREENING' ? 'Sàng lọc' :
+                                 activeTab === 'OVER40' ? 'Trên 40 tuổi' :
+                                 activeTab === 'OVER50' ? 'Trên 50 tuổi' : 'Tất cả'}
+                      </h3>
+                      <button 
+                        onClick={() => setShowAgeStats(!showAgeStats)}
+                        className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${showAgeStats ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-50'}`}
+                      >
+                        {showAgeStats ? <X size={14} /> : <Eye size={14} />}
+                        {showAgeStats ? 'Đóng thống kê' : 'Xem thống kê'}
+                      </button>
+                    </div>
+                    {showAgeStats && (
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <div 
+                            onClick={() => setStatRemoveDuplicates(!statRemoveDuplicates)}
+                            className={`w-8 h-4 rounded-full transition-all relative ${statRemoveDuplicates ? 'bg-blue-600' : 'bg-slate-200'}`}
+                          >
+                            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${statRemoveDuplicates ? 'left-4.5' : 'left-0.5'}`} />
+                          </div>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-600">
+                            Lọc trùng
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <div 
+                            onClick={() => setShowAllAgesInStats(!showAllAgesInStats)}
+                            className={`w-8 h-4 rounded-full transition-all relative ${showAllAgesInStats ? 'bg-emerald-600' : 'bg-slate-200'}`}
+                          >
+                            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${showAllAgesInStats ? 'left-4.5' : 'left-0.5'}`} />
+                          </div>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-emerald-600">
+                            Hiện 0-100+
+                          </span>
+                        </label>
+                        <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-emerald-100 shadow-sm">
+                          {ageStats.size} nhóm tuổi
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <AnimatePresence>
+                    {showAgeStats && (
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="p-8">
+                          {/* Charts Section - Expanded */}
+                          <div className="space-y-10 mb-10">
+                            {/* Age Distribution Chart */}
+                            <div className="w-full bg-slate-50/50 rounded-3xl p-8 border border-slate-100">
+                              <div className="flex items-center justify-between mb-6">
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                  <Activity size={14} className="text-emerald-600" />
+                                  Mật độ độ tuổi
+                                </h4>
+                                <div className="text-[10px] font-bold text-slate-400">
+                                  Trục X: Tuổi | Trục Y: Người
+                                </div>
+                              </div>
+                              <div className="h-[450px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis 
+                                      dataKey="ageNum" 
+                                      axisLine={false}
+                                      tickLine={false}
+                                      tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
+                                      minTickGap={20}
+                                    />
+                                    <YAxis 
+                                      axisLine={false}
+                                      tickLine={false}
+                                      tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
+                                    />
+                                    <Tooltip 
+                                      cursor={{ fill: '#f1f5f9' }}
+                                      content={({ active, payload }) => {
+                                        if (active && payload && payload.length) {
+                                          return (
+                                            <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl">
+                                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{payload[0].payload.age}</p>
+                                              <p className="text-sm font-black text-emerald-600">{payload[0].value} người</p>
+                                            </div>
+                                          );
+                                        }
+                                        return null;
+                                      }}
+                                    />
+                                    <Bar 
+                                      dataKey="count" 
+                                      radius={[4, 4, 0, 0]}
+                                      maxBarSize={40}
+                                    >
+                                      {chartData.map((entry, index) => (
+                                        <Cell 
+                                          key={`cell-${index}`} 
+                                          fill={entry.count > 10 ? '#059669' : '#10b981'} 
+                                          fillOpacity={0.8}
+                                        />
+                                      ))}
+                                    </Bar>
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+
+                              {/* Special Age Groups Summary */}
+                              <div className="columns-1 sm:columns-2 lg:columns-3 gap-x-8 space-y-2 pt-8 mt-8 border-t border-slate-100">
+                                {ageGroupStats.map((group, idx) => (
+                                  <div 
+                                    key={idx} 
+                                    className={`flex items-center justify-between py-1.5 px-3 rounded-lg group transition-colors ${group.count > 0 ? 'hover:bg-blue-50' : 'opacity-30'}`}
+                                  >
+                                    <div className="flex flex-col">
+                                      <div className="flex items-center gap-3">
+                                        <div className={`w-1.5 h-1.5 rounded-full ${group.count > 0 ? 'bg-blue-500' : 'bg-slate-300'}`} />
+                                        <span className="text-sm font-bold text-slate-600">
+                                          - {group.label}: <span className={group.count > 0 ? 'text-blue-600 font-black' : 'text-slate-400'}>{group.count} người</span>
+                                        </span>
+                                      </div>
+                                      {group.count > 0 && (
+                                        <div className="flex items-center gap-2 ml-4.5 mt-0.5">
+                                          <span className="text-[9px] font-black text-blue-500 uppercase">{group.maleCount} Nam</span>
+                                          <span className="text-slate-300 text-[9px]">/</span>
+                                          <span className="text-[9px] font-black text-pink-500 uppercase">{group.femaleCount} Nữ</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {group.count > 0 && (
+                                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                        <button 
+                                          onClick={() => {
+                                            setSelectedGroupForModal({ label: group.label, data: group.data });
+                                            setShowAgeGroupModal(true);
+                                          }}
+                                          className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-blue-200 text-blue-600 rounded-lg text-[9px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                          title="Xem danh sách"
+                                        >
+                                          <Eye size={10} />
+                                          Đối tượng
+                                        </button>
+                                        <button 
+                                          onClick={() => {
+                                            const wb = XLSX.utils.book_new();
+                                            const ws = XLSX.utils.json_to_sheet(group.data);
+                                            XLSX.utils.book_append_sheet(wb, ws, "DanhSach");
+                                            XLSX.writeFile(wb, `Danh_sach_${group.label.replace(/\s+/g, '_')}.xlsx`);
+                                          }}
+                                          className="p-1.5 bg-white border border-emerald-200 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                                          title="Xuất Excel"
+                                        >
+                                          <Download size={10} />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="flex justify-center border-t border-slate-100 pt-6 mt-6 items-center gap-6">
+                                {showDetailedAgeList && (
+                                  <div className="flex items-center gap-4 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                        Nam: {Array.from(ageStats.values()).flat().filter(r => String(r['Giới tính (*)']).includes('Nam') || r['Giới tính (*)'] === '01').length}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="w-2 h-2 rounded-full bg-pink-500" />
+                                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                        Nữ: {Array.from(ageStats.values()).flat().filter(r => !String(r['Giới tính (*)']).includes('Nam') && r['Giới tính (*)'] !== '01').length}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                                <button 
+                                  onClick={() => setShowDetailedAgeList(!showDetailedAgeList)}
+                                  className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-sm ${
+                                    showDetailedAgeList 
+                                    ? 'bg-slate-200 text-slate-600 hover:bg-slate-300' 
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200'
+                                  }`}
+                                >
+                                  {showDetailedAgeList ? (
+                                    <>Thu gọn danh sách</>
+                                  ) : (
+                                    <>
+                                      <Users size={14} />
+                                      Xem chi tiết từng tuổi
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+
+                              <AnimatePresence>
+                                {showDetailedAgeList && (
+                                  <motion.div 
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-8 space-y-2 pt-6 mt-6 border-t border-slate-200/50">
+                                      {(showAllAgesInStats ? Array.from({ length: 101 }, (_, i) => i) : Array.from(ageStats.keys()).sort((a: number, b: number) => a - b))
+                                        .filter((age, index, self) => self.indexOf(age) === index)
+                                        .sort((a: number, b: number) => a - b)
+                                        .map(age => {
+                                          const group = ageStats.get(age) || [];
+                                          const count = group.length;
+                                          if (!showAllAgesInStats && count === 0) return null;
+                                          
+                                          const males = group.filter(r => String(r['Giới tính (*)']).includes('Nam') || r['Giới tính (*)'] === '01').length;
+                                          const females = count - males;
+
+                                          return (
+                                            <div 
+                                              key={age}
+                                              className={`flex items-center justify-between py-1.5 px-3 rounded-lg group transition-colors ${count > 0 ? 'hover:bg-emerald-50' : 'opacity-30'}`}
+                                            >
+                                              <div className="flex flex-col">
+                                                <div className="flex items-center gap-3">
+                                                  <div className={`w-1.5 h-1.5 rounded-full ${count > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                                  <span className="text-sm font-bold text-slate-600">
+                                                    - {age} tuổi: <span className={count > 0 ? 'text-emerald-600 font-black' : 'text-slate-400'}>{count} người</span>
+                                                  </span>
+                                                </div>
+                                                {count > 0 && (
+                                                  <div className="flex items-center gap-2 ml-4.5 mt-0.5">
+                                                    <span className="text-[9px] font-black text-blue-500 uppercase">{males} Nam</span>
+                                                    <span className="text-slate-300 text-[9px]">/</span>
+                                                    <span className="text-[9px] font-black text-pink-500 uppercase">{females} Nữ</span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                              {count > 0 && (
+                                                <button 
+                                                  onClick={() => {
+                                                    setSelectedAgeForModal(age);
+                                                    setShowAgeGroupModal(true);
+                                                  }}
+                                                  className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 px-2.5 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-lg text-[9px] font-black uppercase hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                                                >
+                                                  <Eye size={10} />
+                                                  Đối tượng
+                                                </button>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+
+                            {/* Removed Gender Distribution Section */}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </section>
+
                 {/* Data Preview Card */}
                 <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   {activeTab === 'COPD' && (
@@ -2757,18 +3190,6 @@ function MainApp() {
                             {(!isAdmin && !isSubAdmin) && <Lock size={12} className="ml-1 opacity-50" />}
                             <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'OVER50' ? 'bg-white/20 text-white' : (!isAdmin && !isSubAdmin) ? 'bg-slate-100 text-slate-400' : 'bg-red-50 text-red-600'}`}>
                               {over50List.length}
-                            </span>
-                          </button>
-                          <button 
-                            onClick={() => setActiveTab('SCREENING')}
-                            className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                              activeTab === 'SCREENING' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                          >
-                            <Search size={14} />
-                            Sàng lọc THA & ĐTĐ
-                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'SCREENING' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-600'}`}>
-                              {filteredScreening.length}
                             </span>
                           </button>
                           <button 
@@ -2874,11 +3295,22 @@ function MainApp() {
                                         );
                                       }
 
+                                      const isCopyable = ['Họ tên (*)', 'Mã BHYT (*)', 'Mã BN', 'Mã bệnh nhân', 'MA_BENH_NHAN', 'SO_THE_BHYT', 'TEN_BENH_NHAN'].includes(col);
+                                      
                                       return (
                                         <td key={colIndex} className={`px-4 py-3 text-xs font-medium whitespace-nowrap ${
                                           isDuplicate ? 'text-red-600' : 'text-slate-600'
                                         }`}>
-                                          {row[col] === undefined || row[col] === null || row[col] === '' ? <span className={`italic ${isDuplicate ? 'text-red-400' : 'text-slate-300'}`}>Không</span> : row[col]}
+                                          <div className="flex items-center">
+                                            {row[col] === undefined || row[col] === null || row[col] === '' ? (
+                                              <span className={`italic ${isDuplicate ? 'text-red-400' : 'text-slate-300'}`}>Không</span>
+                                            ) : (
+                                              <>
+                                                {row[col]}
+                                                {isCopyable && <CopyButton text={row[col]} />}
+                                              </>
+                                            )}
+                                          </div>
                                         </td>
                                       );
                                   })}
@@ -2956,8 +3388,18 @@ function MainApp() {
                         <tbody className="divide-y divide-slate-100">
                           {duplicateStats.map((stat, idx) => (
                             <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-4 py-3 text-xs font-bold text-blue-600">{stat.bhyt}</td>
-                              <td className="px-4 py-3 text-xs font-medium text-slate-700">{stat.name}</td>
+                              <td className="px-4 py-3 text-xs font-bold text-blue-600">
+                                <div className="flex items-center">
+                                  {stat.bhyt}
+                                  <CopyButton text={stat.bhyt} />
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-xs font-medium text-slate-700">
+                                <div className="flex items-center">
+                                  {stat.name}
+                                  <CopyButton text={stat.name} />
+                                </div>
+                              </td>
                               <td className="px-4 py-3 text-xs font-black text-amber-600 text-center">{stat.count}</td>
                               <td className="px-4 py-3 text-xs text-slate-500">{stat.dates}</td>
                             </tr>
@@ -2967,14 +3409,24 @@ function MainApp() {
                     </div>
                   </section>
                 )}
-
-
-
-            </div>
-          )}
+              </div>
+            )}
+          </>
+        )}
         </main>
 
 
+        {showAgeGroupModal && (selectedAgeForModal !== null || selectedGroupForModal !== null) && (
+          <AgeGroupModal 
+            title={selectedGroupForModal ? selectedGroupForModal.label : `${selectedAgeForModal} tuổi`}
+            data={selectedGroupForModal ? selectedGroupForModal.data : ageStats.get(selectedAgeForModal!) || []}
+            onClose={() => {
+              setShowAgeGroupModal(false);
+              setSelectedAgeForModal(null);
+              setSelectedGroupForModal(null);
+            }} 
+          />
+        )}
       </div>
       {showAdminUnit && (
         <AdministrativeUnitModal 
@@ -2993,7 +3445,6 @@ function MainApp() {
         />
       )}
       {showAdmin && isAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
-      {showAdvancedConverter && <div className="fixed inset-0 z-[100] bg-white overflow-y-auto p-4 md:p-8"><AdvancedConverter onBack={() => setShowAdvancedConverter(false)} /></div>}
     </div>
   );
 }

@@ -1,12 +1,25 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, EmailAuthProvider, PhoneAuthProvider } from 'firebase/auth';
-import { initializeFirestore } from 'firebase/firestore';
+import { initializeApp, getApp, getApps } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, EmailAuthProvider } from 'firebase/auth';
+import { initializeFirestore, getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = initializeFirestore(app, {
+const isFirebaseConfigValid = firebaseConfig && firebaseConfig.apiKey && !firebaseConfig.apiKey.includes('PLACEHOLDER');
+
+let app;
+if (isFirebaseConfigValid) {
+  try {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  } catch (error) {
+    console.error("Firebase initialization failed", error);
+  }
+}
+
+export const auth = app ? getAuth(app) : null;
+export const db = app ? initializeFirestore(app, {
   experimentalForceLongPolling: true,
-}, (firebaseConfig as any).firestoreDatabaseId || '(default)');
+}, firebaseConfig.firestoreDatabaseId || '(default)') : null;
+
 export const googleProvider = new GoogleAuthProvider();
 export const emailProvider = new EmailAuthProvider();
+
+export { isFirebaseConfigValid };

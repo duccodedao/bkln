@@ -1,19 +1,20 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Global Safety Net
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Helpers
     function isSignedIn() {
       return request.auth != null;
     }
-
+    
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'sonlyhongduc@gmail.com'
+        request.auth.token.email == 'sonlyhongduc@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
@@ -21,18 +22,61 @@ service cloud.firestore {
       return id is string && id.size() <= 128;
     }
 
-    // Users collection
-    match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId;
+    function isValidMonthlyBatch(data) {
+      return data.keys().hasAll(['month', 'program', 'count', 'updatedAt']) &&
+             data.month is string && data.month.size() == 7 &&
+             data.program in ['tha_dtd', 'copd_hen'] &&
+             data.count is number &&
+             data.updatedAt == request.time;
     }
 
-    // Patient Stats 2026
-    match /patients_2026/{patientId} {
+    function isValidScreeningRecord(data) {
+      return data.keys().hasAll(['fullName', 'gender', 'age', 'familyHistory', 'bmi', 'waist', 'bloodPressure', 'totalPoints', 'createdAt', 'createdBy']) &&
+             data.fullName is string && data.fullName.size() <= 200 &&
+             data.gender in [0, 2] &&
+             data.age in [0, 1, 2] &&
+             data.familyHistory in [0, 4] &&
+             data.bmi in [0, 3, 5] &&
+             data.waist is number &&
+             data.bloodPressure is number &&
+             data.totalPoints is number && data.totalPoints >= 0 && data.totalPoints <= 20 &&
+             data.createdAt is timestamp;
+    }
+
+    match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(patientId);
-      allow update: if isSignedIn() && isValidId(patientId);
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /online_screenings/{screeningId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if false; 
+    }
+
+    match /screening_batches/{batchId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidId(batchId) && isValidMonthlyBatch(request.resource.data);
+      allow update: if isAdmin() && isValidMonthlyBatch(request.resource.data) && 
+                    request.resource.data.month == resource.data.month && 
+                    request.resource.data.program == resource.data.program;
       allow delete: if isAdmin();
+
+      match /records/{recordId} {
+        allow read: if isSignedIn();
+        allow create: if isAdmin() && isValidId(recordId) && isValidScreeningRecord(request.resource.data) &&
+                      request.resource.data.createdAt == request.time;
+        allow update: if isAdmin() && isValidScreeningRecord(request.resource.data) &&
+                      request.resource.data.createdAt == resource.data.createdAt &&
+                      request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isAdmin();
+      }
     }
   }
 }

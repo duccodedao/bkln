@@ -1,32 +1,45 @@
 {
   "entities": {
-    "PatientStats2026": {
-      "title": "Patient Stats 2026",
-      "description": "Stats for patients visiting the station in 2026",
+    "ScreeningRecord": {
+      "title": "Screening Record",
+      "description": "An individual screening record for a patient",
       "type": "object",
       "properties": {
-        "Stt": { "type": "number" },
-        "Mã BN": { "type": "string" },
-        "Họ tên (*)": { "type": "string" },
-        "Giới tính (*)": { "type": "string" },
-        "Năm sinh (*)": { "type": "string" },
-        "Mã BHYT (*)": { "type": "string" },
-        "Số CMT/CCCD (*)": { "type": "string" },
-        "Số điện thoại": { "type": "string" },
-        "Địa chỉ": { "type": "string" },
-        "Xã/Phường/Thị trấn (*)": { "type": "string" },
-        "Ngày khám (*)": { "type": "string" },
-        "Phân loại BN (*)": { "type": "string" },
-        "syncAt": { "type": "string", "format": "date-time" },
-        "syncedBy": { "type": "string" }
+        "fullName": { "type": "string", "description": "Patient full name" },
+        "gender": { "type": "number", "description": "0 for Female, 2 for Male" },
+        "age": { "type": "number", "description": "0 for <45, 1 for 45-49, 2 for >49" },
+        "familyHistory": { "type": "number", "description": "0 for No, 4 for Yes" },
+        "bmi": { "type": "number", "description": "0 for <23, 3 for 23-27.5, 5 for >27.5" },
+        "waist": { "type": "number", "description": "0 for Normal, 2 for High" },
+        "bloodPressure": { "type": "number", "description": "0 for Normal, 2 for High" },
+        "totalPoints": { "type": "number" },
+        "isAtRisk": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
       },
-      "required": ["Mã BN", "Họ tên (*)"]
+      "required": ["fullName", "gender", "age", "familyHistory", "bmi", "waist", "bloodPressure", "totalPoints", "createdAt", "createdBy"]
+    },
+    "MonthlyBatch": {
+      "title": "Monthly Batch",
+      "description": "Metadata for a monthly screening batch",
+      "type": "object",
+      "properties": {
+        "month": { "type": "string", "description": "YYYY-MM format" },
+        "program": { "type": "string", "enum": ["tha_dtd", "copd_hen"] },
+        "count": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["month", "program", "count", "updatedAt"]
     }
   },
   "firestore": {
-    "/patients_2026/{patientId}": {
-      "schema": "PatientStats2026",
-      "description": "Collection of patient visit statistics for 2026"
+    "/screening_batches/{batchId}": {
+      "schema": "MonthlyBatch",
+      "description": "Collection of monthly screening batches"
+    },
+    "/screening_batches/{batchId}/records/{recordId}": {
+      "schema": "ScreeningRecord",
+      "description": "Individual records within a batch"
     }
   }
 }

@@ -27,11 +27,9 @@ import {
   BarChart3,
   RefreshCcw,
   Info,
-  ClipboardList,
   Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AdvancedConverter } from './AdvancedConverter';
 import { 
   BarChart, 
   Bar, 
@@ -53,7 +51,7 @@ const YesNoBadge = ({ value }: { value: boolean }) => (
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [onlineScreenings, setOnlineScreenings] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'screenings' | 'settings' | 'converter'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'settings'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [confirmModal, setConfirmModal] = useState<{
@@ -94,15 +92,21 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   }, [users]);
 
   useEffect(() => {
-    const qUsers = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    if (!db) {
+      setLoading(false);
+      return;
+    }
+    const qUsers = query(collection(db, 'users'));
     const unsubUsers = onSnapshot(qUsers, (snap) => {
       const usersData: UserProfile[] = [];
       snap.forEach(doc => {
         const data = doc.data() as UserProfile;
         usersData.push({ ...data, uid: doc.id });
       });
+      usersData.sort((a, b) => b.createdAt - a.createdAt);
       setUsers(usersData);
-      setLoading(false);
+    }, (error) => {
+      console.error("Users subscription error:", error);
     });
 
     const qScreenings = query(collection(db, 'online_screenings'), orderBy('createdAt', 'desc'));
@@ -112,6 +116,10 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         screeningsData.push({ ...doc.data(), id: doc.id });
       });
       setOnlineScreenings(screeningsData);
+      setLoading(false);
+    }, (error) => {
+      console.error("Screenings subscription error:", error);
+      setLoading(false);
     });
 
     return () => {
@@ -165,12 +173,6 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (u.organization || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const filteredScreenings = onlineScreenings.filter(s => 
-    (s.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.address || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const exportUsers = () => {
@@ -329,29 +331,12 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               <span className="ml-auto px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[10px]">{users.length}</span>
             </button>
             <button 
-              onClick={() => setActiveTab('screenings')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'screenings' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
-            >
-              <ClipboardList size={18} />
-              Sàng lọc Online
-              <span className="ml-auto px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[10px]">{onlineScreenings.length}</span>
-            </button>
-            <button 
               onClick={() => setActiveTab('settings')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'settings' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
             >
               <Settings size={18} />
               Cài đặt hệ thống
             </button>
-            <div className="pt-4 mt-4 border-t border-slate-50">
-              <button 
-                onClick={() => setActiveTab('converter')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'converter' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
-              >
-                <RefreshCcw size={18} />
-                Chuyển đổi nâng cao
-              </button>
-            </div>
           </div>
 
           {/* Main Content */}
@@ -602,194 +587,6 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {activeTab === 'screenings' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-                  <div className="relative w-full sm:w-96">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input 
-                      type="text" 
-                      placeholder="Tìm kiếm theo tên, SĐT, địa chỉ..." 
-                      className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-3 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={exportScreenings}
-                      className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-blue-600 transition-all shadow-sm"
-                      title="Xuất danh sách sàng lọc"
-                    >
-                      <Download size={18} />
-                    </button>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2">
-                      {filteredScreenings.length} / {onlineScreenings.length} bản ghi
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto no-scrollbar">
-                    <table className="w-full text-left border-collapse min-w-[4000px]">
-                      <thead>
-                        <tr className="bg-slate-50/50 border-b border-slate-100">
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest sticky left-0 bg-white z-20 border-r border-slate-100">Họ tên</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Người điều tra</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Đơn vị</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Xã/Phường</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ngày thực hiện</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Năm sinh</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Giới tính</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">SĐT</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Địa chỉ</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">BMI</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vòng bụng</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">HA Lần 1</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">HA Lần 2</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Đường huyết</th>
-                          
-                          {/* Tiền sử gia đình */}
-                          <th className="px-2 py-4 text-[9px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50/30">GĐ ĐTD</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50/30">GĐ THA</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50/30">GĐ UT</th>
-                          
-                          {/* Yếu tố nguy cơ */}
-                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Thiếu rau</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Ăn mặn</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Hút thuốc</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Stress</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Ít VĐ</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Rượu bia</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50/30">Thai kỳ</th>
-                          
-                          {/* Dấu hiệu nghi ngờ */}
-                          <th className="px-2 py-4 text-[9px] font-black text-red-600 uppercase tracking-tighter bg-red-50/30">Nghi THA</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-red-600 uppercase tracking-tighter bg-red-50/30">Nghi ĐTD</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-red-600 uppercase tracking-tighter bg-red-50/30">Nghi UT</th>
-                          
-                          {/* COPD */}
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Ho (COPD)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Đờm (COPD)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Khó thở (COPD)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Trên 40T (COPD)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50/30">Hút thuốc (COPD)</th>
-                          
-                          {/* Hen */}
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Khò khè (Hen)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Khó thở đêm (Hen)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Ho đêm (Hen)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Nặng ngực (Hen)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Gắng sức (Hen)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Nghỉ ngơi (Hen)</th>
-                          <th className="px-2 py-4 text-[9px] font-black text-violet-600 uppercase tracking-tighter bg-violet-50/30">Công việc (Hen)</th>
-                          
-                          {/* Kết luận */}
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-900 uppercase tracking-widest bg-slate-100">KL ĐTD</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-900 uppercase tracking-widest bg-slate-100">KL COPD</th>
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-900 uppercase tracking-widest bg-slate-100">KL Hen</th>
-                          
-                          <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right sticky right-0 bg-white z-20 border-l border-slate-100">Hành động</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {filteredScreenings.map(s => {
-                          const sbp = Math.max(parseFloat(s.sbp1) || 0, parseFloat(s.sbp2) || 0);
-                          const dbp = Math.max(parseFloat(s.dbp1) || 0, parseFloat(s.dbp2) || 0);
-                          const isHighBP = sbp >= 140 || dbp >= 90;
-                          
-                          return (
-                            <tr key={s.id} className="hover:bg-slate-50/30 transition-colors group">
-                              <td className="px-4 py-4 sticky left-0 bg-white group-hover:bg-slate-50/30 z-10 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                                <p className="text-sm font-bold text-slate-800 whitespace-nowrap">{s.fullName}</p>
-                              </td>
-                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.investigator || '-'}</td>
-                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.workUnit || '-'}</td>
-                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.ward || '-'}</td>
-                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.executionDate || '-'}</td>
-                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.birthYear}</td>
-                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.gender}</td>
-                              <td className="px-4 py-4 text-xs text-slate-600 font-medium">{s.phone}</td>
-                              <td className="px-4 py-4 text-xs text-slate-400 truncate max-w-[200px]">{s.address}</td>
-                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{(s.bmi || 0).toFixed(1)}</td>
-                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{s.waist}cm</td>
-                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{s.sbp1}/{s.dbp1}</td>
-                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{s.sbp2}/{s.dbp2}</td>
-                              <td className="px-4 py-4 text-xs font-bold text-slate-700">{s.bloodSugar || '-'}</td>
-                              
-                              {/* Tiền sử GĐ */}
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.familyDiabetes} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.familyHypertension} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.familyCancer} /></td>
-                              
-                              {/* Yếu tố nguy cơ */}
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.lowVeggie} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.highSalt} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.smoking} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.stress} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.lowPhysicalActivity} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.highAlcohol} /></td>
-                              <td className="px-2 py-4 text-center">{s.gender === 'Nữ' ? <YesNoBadge value={s.gestationalDiabetes} /> : '-'}</td>
-                              
-                              {/* Dấu hiệu nghi ngờ */}
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.signHTN} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.signDiabetes} /></td>
-                              <td className="px-2 py-4 text-center">
-                                <span title="Sores/Lump/Bleeding/Swallow/Cough" className="cursor-help">
-                                  <YesNoBadge value={s.signCancer_sores || s.signCancer_lump || s.signCancer_bleeding || s.signCancer_swallow || s.signCancer_cough} />
-                                </span>
-                              </td>
-                              
-                              {/* COPD */}
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_cough} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_phlegm} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.copd_dyspnea} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.age >= 40} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.smoking || s.formerSmoker} /></td>
-                              
-                              {/* Hen */}
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_wheeze} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_night_breathless} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_night_cough} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_tight_chest} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_exercise_breathless} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_rest_breathless} /></td>
-                              <td className="px-2 py-4 text-center"><YesNoBadge value={s.asthma_work_related} /></td>
-                              
-                              {/* Kết luận riêng biệt */}
-                              <td className="px-4 py-4">
-                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${s.diabetesRiskScore >= 6 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                                  {s.diabetesRiskScore >= 6 ? 'Nguy cơ' : 'Bình thường'}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4">
-                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${(s.copdPositiveCount || s.copdCount) >= 3 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                                  {(s.copdPositiveCount || s.copdCount) >= 3 ? 'Nghi ngờ' : 'Bình thường'}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4">
-                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${(s.asthmaPositiveCount || s.asthmaCount) >= 2 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                                  {(s.asthmaPositiveCount || s.asthmaCount) >= 2 ? 'Nghi ngờ' : 'Bình thường'}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4 text-right sticky right-0 bg-white group-hover:bg-slate-50/30 z-10 border-l border-slate-100 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                                <button 
-                                  onClick={() => deleteScreening(s.id)}
-                                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {activeTab === 'settings' && (
               <div className="space-y-6">
                 <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-8">
@@ -798,10 +595,10 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                       <div className="space-y-2">
                         <h4 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                           <Shield size={20} className="text-blue-600" />
-                          Quản lý tính năng nâng cao
+                          Quản lý hệ thống
                         </h4>
                         <p className="text-sm text-slate-500 leading-relaxed max-w-md">
-                          Hiện tại tất cả tính năng lọc dữ liệu đã được mở khóa cho mọi người dùng. Tính năng <span className="font-bold text-slate-900">Cấu hình đường huyết</span> vẫn được giới hạn cho Admin và người dùng được cấp quyền.
+                          Tính năng quản trị đang được tối ưu hóa.
                         </p>
                       </div>
                     </div>
@@ -812,17 +609,11 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                     <div>
                       <h5 className="text-sm font-bold text-blue-900">Thông tin hệ thống</h5>
                       <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-                        Hệ thống thanh toán đã được gỡ bỏ. Bạn có thể cấp quyền "Premium" thủ công cho người dùng trong tab "Người dùng" để họ sử dụng được tính năng Cấu hình đường huyết.
+                        Bạn có thể quản lý người dùng và vai trò trực tiếp từ bảng điều khiển.
                       </p>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {activeTab === 'converter' && (
-              <div className="space-y-6">
-                <AdvancedConverter onBack={() => setActiveTab('dashboard')} />
               </div>
             )}
           </div>

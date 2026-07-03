@@ -57,23 +57,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
+
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
-        const docRef = doc(db, 'users', currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          setProfile(docSnap.data() as UserProfile);
-          setNeedsProfileSetup(false);
+      
+      // Clean up previous profile listener
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
+      if (currentUser && db) {
+        setLoading(true);
+        try {
+          const docRef = doc(db, 'users', currentUser.uid);
           
-          onSnapshot(docRef, (snap) => {
-            if (snap.exists()) {
-              setProfile(snap.data() as UserProfile);
-            }
-          });
-        } else {
-          setNeedsProfileSetup(true);
+          // Initial fetch to determine if profile exists
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
+            setNeedsProfileSetup(false);
+            
+            // Start real-time listener
+            unsubscribeProfile = onSnapshot(docRef, (snap) => {
+              if (snap.exists()) {
+                setProfile(snap.data() as UserProfile);
+              }
+            }, (error) => {
+              console.error("Profile subscription error:", error);
+            });
+          } else {
+            setProfile(null);
+            setNeedsProfileSetup(true);
+          }
+        } catch (error) {
+          console.error("Error fetching profile:", error);
+          setProfile(null);
         }
       } else {
         setProfile(null);
@@ -83,11 +109,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
-      unsubscribe();
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
     };
   }, []);
 
   const loginWithGoogle = async () => {
+    if (!auth) throw new Error('Firebase không được cấu hình. Vui lòng thiết lập Firebase để đăng nhập.');
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
@@ -97,24 +125,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithEmail = async (email: string, pass: string, remember: boolean) => {
+    if (!auth) throw new Error('Firebase không được cấu hình.');
     await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
   const registerWithEmail = async (email: string, pass: string) => {
+    if (!auth) throw new Error('Firebase không được cấu hình.');
     await createUserWithEmailAndPassword(auth, email, pass);
   };
 
   const loginWithPhone = async (phone: string, appVerifier: RecaptchaVerifier) => {
+    if (!auth) throw new Error('Firebase không được cấu hình.');
     return await signInWithPhoneNumber(auth, phone, appVerifier);
   };
 
   const logout = async () => {
-    await signOut(auth);
+    if (auth) await signOut(auth);
   };
 
   const setupProfile = async (name: string, org: string) => {
-    if (!user) return;
+    if (!user || !db) return;
     
     let ip = 'Unknown';
     try {
