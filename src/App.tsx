@@ -2035,7 +2035,7 @@ function MainApp() {
               <Menu size={24} />
             </button>
             <div className="p-2 bg-blue-50 rounded-xl hidden sm:block">
-              <img src="/https://raw.githubusercontent.com/duccodedao/Img/main/system/logo-1781680259856.png" alt="Logo" className="h-10 w-auto rounded-lg object-contain shadow-sm" />
+              <img src="https://raw.githubusercontent.com/duccodedao/Img/main/system/logo-1781680259856.png" alt="Logo" className="h-10 w-auto rounded-lg object-contain shadow-sm" />
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900">Bmass Data Converter</h1>
