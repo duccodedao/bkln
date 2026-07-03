@@ -470,7 +470,7 @@ function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) 
         <div className="bg-white p-10 rounded-[3rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.1)] border border-slate-100">
           <div className="flex flex-col items-center mb-10">
             <div className="p-4 bg-blue-50 rounded-3xl mb-4 shadow-inner">
-              <img src="/icon.png" alt="Logo" className="h-12 w-auto object-contain" />
+              <img src="https://raw.githubusercontent.com/duccodedao/Img/main/system/logo-1781680259856.png" alt="Logo" className="h-12 w-auto object-contain" />
             </div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Thiết lập <span className="text-blue-600">Hồ sơ</span></h2>
             <div className="h-1 w-12 bg-blue-600 rounded-full mt-2" />
@@ -518,7 +518,7 @@ function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) 
           </div>
 
           <div className="mt-12 flex items-center justify-center gap-4 opacity-20 grayscale">
-             <img src="/icon.png" alt="BMASS" className="h-6 w-auto" />
+             <img src="https://raw.githubusercontent.com/duccodedao/Img/main/system/logo-1781680259856.png" alt="BMASS" className="h-6 w-auto" />
              <div className="w-1.5 h-1.5 bg-slate-900 rounded-full" />
              <span className="text-[8px] font-black uppercase tracking-[0.4em]">Powered by BMASS Cloud</span>
           </div>
@@ -1814,7 +1814,7 @@ function MainApp() {
           transition={{ duration: 0.5 }}
           className="flex flex-col items-center gap-8"
         >
-          <img src="/icon.png" alt="Loading" className="h-20 w-auto object-contain" />
+          <img src="https://raw.githubusercontent.com/duccodedao/Img/main/system/logo-1781680259856.png" alt="Loading" className="h-20 w-auto object-contain" />
           
           <div className="flex flex-col items-center gap-3">
             <div className="w-48 h-1 bg-slate-100 rounded-full overflow-hidden relative">
@@ -1984,7 +1984,7 @@ function MainApp() {
 
               {/* Platform Footer Branding */}
               <div className="mt-12 w-full flex items-center justify-between opacity-20 grayscale">
-                <img src="/icon.png" alt="BMASS" className="h-6 w-auto" />
+                <img src="https://raw.githubusercontent.com/duccodedao/Img/main/system/logo-1781680259856.png" alt="BMASS" className="h-6 w-auto" />
                 <div className="text-[9px] font-black uppercase tracking-[0.3em] flex items-center gap-3">
                   <span>Secured by BMASS Cloud</span>
                   <div className="w-1.5 h-1.5 bg-white rounded-full" />
@@ -2035,7 +2035,7 @@ function MainApp() {
               <Menu size={24} />
             </button>
             <div className="p-2 bg-blue-50 rounded-xl hidden sm:block">
-              <img src="/icon.png" alt="Logo" className="h-10 w-auto rounded-lg object-contain shadow-sm" />
+              <img src="/https://raw.githubusercontent.com/duccodedao/Img/main/system/logo-1781680259856.png" alt="Logo" className="h-10 w-auto rounded-lg object-contain shadow-sm" />
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900">Bmass Data Converter</h1>
@@ -2087,7 +2087,7 @@ function MainApp() {
               >
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <img src="/icon.png" alt="Logo" className="h-6 w-auto" />
+                    <img src="/https://raw.githubusercontent.com/duccodedao/Img/main/system/logo-1781680259856.png" alt="Logo" className="h-6 w-auto" />
                     <span className="font-black text-slate-900 tracking-tight text-sm">BMASS</span>
                   </div>
                   <button 
