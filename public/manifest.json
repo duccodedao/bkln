@@ -1,0 +1,17 @@
+{
+  "name": "Bmass - Chuyển đổi Dữ liệu THA-ĐTĐ",
+  "short_name": "Bmass",
+  "description": "Hệ thống chuyển đổi dữ liệu Bệnh Không Lây nhiễm dành cho Trạm Y tế.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

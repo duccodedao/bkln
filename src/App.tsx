@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileUp, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw, ShieldCheck, Check, LogIn, Menu, X, Search, Wind, Plus, Save, FileJson, Eye, Copy } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, AlertCircle, Trash2, FileUp, Activity, Droplet, Settings, Calendar, LogOut, Shield, Lock, ShieldAlert, MapPin, CheckSquare, Square, CheckCircle, Users, Database, Filter, ChevronRight, Info, RefreshCcw, ShieldCheck, Check, LogIn, Menu, X, Search, Wind, Plus, Save, FileJson, Eye, Copy, Monitor, Smartphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, Sector } from 'recharts';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -470,7 +470,7 @@ function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) 
         <div className="bg-white p-10 rounded-[3rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.1)] border border-slate-100">
           <div className="flex flex-col items-center mb-10">
             <div className="p-4 bg-blue-50 rounded-3xl mb-4 shadow-inner">
-              <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-12 w-auto object-contain" />
+              <img src="/icon.png" alt="Logo" className="h-12 w-auto object-contain" />
             </div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Thiết lập <span className="text-blue-600">Hồ sơ</span></h2>
             <div className="h-1 w-12 bg-blue-600 rounded-full mt-2" />
@@ -518,7 +518,7 @@ function ProfileSetupForm({ onSubmit }: { onSubmit: (name: string, org: string) 
           </div>
 
           <div className="mt-12 flex items-center justify-center gap-4 opacity-20 grayscale">
-             <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="BMASS" className="h-6 w-auto" />
+             <img src="/icon.png" alt="BMASS" className="h-6 w-auto" />
              <div className="w-1.5 h-1.5 bg-slate-900 rounded-full" />
              <span className="text-[8px] font-black uppercase tracking-[0.4em]">Powered by BMASS Cloud</span>
           </div>
@@ -564,6 +564,20 @@ function Toggle({ enabled, onChange, label, description, icon: Icon, disabled = 
 }
 
 function MainApp() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isSmallScreen = window.innerWidth < 1024;
+      setIsMobile(isMobileDevice || isSmallScreen);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const { 
     user, profile, 
     logout, needsProfileSetup, setupProfile, loading: authLoading 
@@ -1739,325 +1753,106 @@ function MainApp() {
     });
   }, [currentData, activeTab, searchQueries]);
 
-  if (authLoading) {
+  if (isMobile) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white relative overflow-hidden">
-        {/* Architectural Background */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <motion.div 
-            animate={{ 
-              scale: [1, 1.3, 1],
-              opacity: [0.3, 0.6, 0.3],
-              rotate: [0, 45, 0]
-            }}
-            transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-            className="absolute -top-[20%] -left-[20%] w-[60%] h-[60%] bg-blue-50 rounded-full blur-[120px]"
-          />
-          <motion.div 
-            animate={{ 
-              scale: [1, 1.2, 1],
-              opacity: [0.2, 0.5, 0.2],
-              rotate: [0, -45, 0]
-            }}
-            transition={{ duration: 12, repeat: Infinity, ease: "linear", delay: 2 }}
-            className="absolute -bottom-[20%] -right-[20%] w-[60%] h-[60%] bg-indigo-50 rounded-full blur-[120px]"
-          />
+      <div className="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center p-8 text-center overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,#f8fbff_0%,#ffffff_100%)]" />
         </div>
-
+        
         <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          className="relative z-10 flex flex-col items-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative z-10 flex flex-col items-center max-w-sm"
         >
-          <div className="relative mb-12 flex items-center justify-center">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-              className="absolute w-40 h-40 border-2 border-blue-100 rounded-full border-dashed"
-            />
-            <motion.div
-              animate={{ rotate: -360 }}
-              transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-              className="absolute w-32 h-32 border border-blue-50 rounded-full opacity-50"
-            />
-            <motion.img 
-              initial={{ y: 10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.3, duration: 1 }}
-              src="https://tytpht.hdd.io.vn/img/bmassloadings.png" 
-              alt="Loading" 
-              className="h-28 w-auto object-contain relative z-20 drop-shadow-2xl" 
-            />
+          <div className="relative mb-8">
+            <div className="p-8 bg-blue-50 rounded-[2.5rem] relative z-10">
+              <Monitor size={64} className="text-blue-600" />
+              <motion.div 
+                animate={{ scale: [1, 1.2, 1], opacity: [1, 0, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute -top-2 -right-2 p-3 bg-red-500 rounded-2xl border-4 border-white"
+              >
+                <Smartphone size={24} className="text-white" />
+              </motion.div>
+            </div>
+            <div className="absolute inset-0 bg-blue-100 blur-3xl opacity-20 -z-10 animate-pulse" />
           </div>
+
+          <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic leading-none mb-4">
+            YÊU CẦU <span className="text-blue-600">MÁY TÍNH</span>
+          </h2>
           
-          <div className="space-y-6 text-center max-w-xs">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="space-y-2"
-            >
-              <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">BMASS <span className="text-blue-600">HEALTH</span></h2>
-              <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
-            </motion.div>
-            
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-48 h-1 bg-slate-100 rounded-full overflow-hidden relative shadow-inner">
-                <motion.div 
-                  initial={{ x: "-100%" }}
-                  animate={{ x: "100%" }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute h-full w-1/2 bg-gradient-to-r from-transparent via-blue-600 to-transparent"
-                />
-              </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] animate-pulse">Initializing Security Layer</p>
+          <p className="text-slate-500 font-medium leading-relaxed mb-10 text-lg">
+            Hệ thống <span className="font-bold text-slate-900 uppercase italic">Bmass</span> yêu cầu màn hình rộng để đảm bảo độ chính xác khi xử lý dữ liệu y tế.
+          </p>
+
+          <div className="w-full p-6 bg-slate-50 rounded-[2rem] border border-slate-100 mb-10 shadow-inner">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-3">Đường dẫn truy cập (Domain)</p>
+            <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+               <span className="text-blue-600 font-mono font-black text-sm break-all">{window.location.hostname}</span>
             </div>
           </div>
-        </motion.div>
 
-        {/* Technical Detail Elements */}
-        <div className="absolute bottom-12 left-12 opacity-10 hidden sm:block">
-           <div className="font-mono text-[10px] text-slate-900 space-y-1">
-             <p>SYSTEM_BOOT_SEQUENCE: 100%</p>
-             <p>DATABASE_SYNC: ENABLED</p>
-             <p>SECURITY_PROTOCOL_v4: ACTIVE</p>
-           </div>
-        </div>
+          <div className="pt-6 border-t border-slate-100 w-full">
+            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-relaxed">
+              Hệ thống được quản trị bởi <br/>
+              <span className="text-slate-400">Sơn Lý Hồng Đức</span>
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col items-center gap-8"
+        >
+          <img src="/icon.png" alt="Loading" className="h-20 w-auto object-contain" />
+          
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-48 h-1 bg-slate-100 rounded-full overflow-hidden relative">
+              <motion.div 
+                initial={{ x: "-100%" }}
+                animate={{ x: "100%" }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                className="absolute h-full w-1/3 bg-blue-600 rounded-full"
+              />
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Đang tải dữ liệu...</p>
+          </div>
+        </motion.div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden">
-        {/* Advanced Grid & Radial Background */}
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="fixed inset-0 pointer-events-none">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,#f8fbff_0%,#ffffff_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,#f8fbff_0%,#ffffff_100%)]" />
           <div className="absolute inset-0 opacity-[0.4]" style={{ 
             backgroundImage: 'linear-gradient(rgba(59,130,246,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.1) 1px, transparent 1px)', 
             backgroundSize: '80px 80px'
           }} />
-          <div className="absolute inset-0 opacity-[0.2]" style={{ 
-            backgroundImage: 'linear-gradient(rgba(59,130,246,0.1) 0.5px, transparent 0.5px), linear-gradient(90deg, rgba(59,130,246,0.1) 0.5px, transparent 0.5px)', 
-            backgroundSize: '20px 20px'
-          }} />
         </div>
-
-        {/* Premium Transparent Header */}
-        <header className="fixed top-0 left-0 right-0 z-50 bg-white/40 backdrop-blur-2xl border-b border-slate-100/50 px-6 py-4">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-2.5 bg-blue-600 rounded-[1.25rem] shadow-xl shadow-blue-200">
-                <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-8 w-auto brightness-0 invert" />
-              </div>
-              <div>
-                <span className="block font-black text-slate-900 tracking-tight text-xl leading-none uppercase">BMASS</span>
-                <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mt-1 block">Healthcare</span>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-6">
-              <nav className="hidden lg:flex items-center gap-8">
-                {['Giải pháp', 'Công nghệ', 'Bảo mật', 'Liên hệ'].map(item => (
-                  <a key={item} href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors uppercase tracking-widest">{item}</a>
-                ))}
-              </nav>
-              <div className="h-8 w-[1px] bg-slate-200 hidden sm:block" />
-              <button 
-                onClick={() => setShowLogin(true)}
-                className="group relative px-8 py-3 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-2xl shadow-slate-200"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/0 via-white/5 to-blue-600/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                <span className="relative z-10 flex items-center gap-2">
-                  <LogIn size={16} />
-                  Khởi động
-                </span>
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="relative pt-44 pb-32 px-6 overflow-hidden">
-          <div className="max-w-6xl mx-auto text-center flex flex-col items-center">
-            <motion.div
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-              className="space-y-8"
-            >
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full mb-4 shadow-xl shadow-slate-200">
-                <div className="w-1 h-1 bg-blue-400 rounded-full animate-ping" />
-                <span className="text-[9px] font-black uppercase tracking-[0.4em]">Enterprise Grade Core v2.0</span>
-              </div>
-              
-              <h1 className="text-6xl sm:text-8xl lg:text-9xl font-black text-slate-900 tracking-tighter leading-[0.85] italic uppercase">
-                SỐ HÓA <br/>
-                <span className="text-blue-600 relative inline-block">
-                  Y TẾ 
-                  <motion.div 
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    transition={{ delay: 1, duration: 1.5 }}
-                    className="absolute -bottom-2 left-0 w-full h-4 bg-blue-50 -z-10 origin-left"
-                  />
-                </span>
-                <span className="text-slate-300">.</span>
-              </h1>
-              
-              <p className="text-xl sm:text-2xl text-slate-500 font-medium max-w-3xl mx-auto leading-relaxed">
-                Nền tảng kiến trúc dữ liệu thông minh, tự động hóa quy trình chuẩn hóa danh mục kỹ thuật và hồ sơ bệnh án theo tiêu chuẩn HL7-BMASS.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-5 pt-8">
-                <button 
-                  onClick={() => setShowLogin(true)}
-                  className="w-full sm:w-auto group relative px-12 py-6 bg-blue-600 text-white rounded-[2.5rem] text-lg font-black uppercase tracking-tight hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(59,130,246,0.4)] active:scale-95 flex items-center justify-center gap-4"
-                >
-                  BẮT ĐẦU NGAY LẬP TỨC
-                  <ChevronRight size={24} className="group-hover:translate-x-1 transition-transform" />
-                </button>
-                <div className="flex -space-x-4">
-                  {[1,2,3,4].map(i => (
-                    <div key={i} className="w-12 h-12 rounded-full border-4 border-white bg-slate-100 flex items-center justify-center shadow-lg">
-                      <Users size={16} className="text-slate-400" />
-                    </div>
-                  ))}
-                  <div className="pl-6 flex flex-col items-start justify-center">
-                    <span className="text-xs font-black text-slate-900 leading-none text-left">2,400+</span>
-                    <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Người dùng tin tưởng</span>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* High-End Tech Mockup */}
-            <motion.div
-              initial={{ opacity: 0, y: 100, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 0.4, duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-32 w-full max-w-7xl relative"
-            >
-              <div className="relative z-10 bg-white/50 backdrop-blur-md rounded-[3rem] p-4 sm:p-8 border border-slate-200/60 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] group">
-                <div className="aspect-[16/10] bg-slate-50 border border-slate-100 rounded-[2rem] overflow-hidden relative shadow-inner">
-                  {/* Decorative Dashboard Elements */}
-                  <div className="absolute top-0 left-0 w-full h-full p-12 flex flex-col items-center justify-center opacity-10">
-                     <Database size={200} strokeWidth={0.5} />
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5" />
-                  
-                  {/* Center UI Preview */}
-                  <div className="absolute inset-0 flex items-center justify-center p-12">
-                     <div className="w-full max-w-3xl bg-white rounded-3xl shadow-3xl border border-slate-200/50 p-8 space-y-6">
-                        <div className="flex items-center justify-between">
-                           <div className="flex gap-2">
-                             <div className="w-3 h-3 rounded-full bg-red-100" />
-                             <div className="w-3 h-3 rounded-full bg-amber-100" />
-                             <div className="w-3 h-3 rounded-full bg-emerald-100" />
-                           </div>
-                           <div className="h-4 w-32 bg-slate-50 rounded-full" />
-                        </div>
-                        <div className="grid grid-cols-12 gap-4">
-                           <div className="col-span-8 space-y-4">
-                             <div className="h-20 w-full bg-blue-50 rounded-2xl" />
-                             <div className="h-40 w-full bg-slate-50 rounded-2xl" />
-                           </div>
-                           <div className="col-span-4 space-y-4">
-                             <div className="h-64 w-full bg-slate-50/50 rounded-2xl" />
-                           </div>
-                        </div>
-                     </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Background Floating Nodes */}
-              <div className="absolute -top-12 -right-12 w-48 h-48 bg-blue-600/5 rounded-full blur-3xl animate-pulse" />
-              <div className="absolute -bottom-12 -left-12 w-64 h-64 bg-indigo-600/5 rounded-full blur-3xl animate-pulse delay-700" />
-            </motion.div>
-          </div>
-        </main>
-
-        <section className="bg-slate-900 py-32 px-6 relative overflow-hidden">
-           <div className="absolute inset-0 opacity-5" style={{ 
-             backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
-             backgroundSize: '40px 40px'
-           }} />
-           <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-              <div className="space-y-8">
-                 <h2 className="text-4xl sm:text-6xl font-black text-white leading-tight italic">
-                   Bảo mật dữ liệu <br/>
-                   <span className="text-blue-500">là ưu tiên hàng đầu. </span>
-                 </h2>
-                 <p className="text-xl text-slate-400 font-medium leading-relaxed max-w-xl">
-                   Mọi thông tin bệnh án đều được mã hóa theo tiêu chuẩn AES-256 quân đội và lưu trữ trên hệ thống máy chủ chuyên dụng của BMASS.
-                 </p>
-                 <div className="flex gap-4">
-                   <div className="px-6 py-4 bg-white/5 border border-white/10 rounded-3xl flex-1">
-                      <Shield size={32} className="text-blue-500 mb-4" />
-                      <h4 className="font-black text-white text-sm uppercase mb-2">Endpoint Security</h4>
-                      <p className="text-xs text-slate-500 font-bold leading-relaxed">Xác thực đa yếu tố và quét mã độc thời gian thực cho mọi tệp tin tải lên.</p>
-                   </div>
-                   <div className="px-6 py-4 bg-white/5 border border-white/10 rounded-3xl flex-1">
-                      <Lock size={32} className="text-indigo-500 mb-4" />
-                      <h4 className="font-black text-white text-sm uppercase mb-2">Data Privacy</h4>
-                      <p className="text-xs text-slate-500 font-bold leading-relaxed">Tuân thủ nghiêm ngặt các quy định về bảo mật thông tin cá nhân y tế.</p>
-                   </div>
-                 </div>
-              </div>
-              <div className="relative">
-                 <motion.div 
-                   animate={{ rotateY: [0, 10, 0], rotateX: [0, 5, 0] }}
-                   transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                   className="relative z-10 p-12 bg-white/5 border border-white/10 rounded-[3rem] backdrop-blur-3xl aspect-square flex items-center justify-center transform perspective-1000"
-                 >
-                    <ShieldAlert size={200} strokeWidth={0.5} className="text-white opacity-20" />
-                    <div className="absolute flex flex-col items-center gap-4">
-                       <CheckCircle size={80} className="text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
-                       <span className="text-xs font-black text-white tracking-[1em] uppercase ml-4">Encrypted</span>
-                    </div>
-                 </motion.div>
-              </div>
-           </div>
-        </section>
-
-        {/* Login Modal */}
-        <AnimatePresence>
-          {showLogin && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setShowLogin(false)}
-                className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 30 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 30 }}
-                transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                className="relative w-full max-w-lg"
-              >
-                <div className="absolute -top-12 right-0">
-                  <button 
-                    onClick={() => setShowLogin(false)}
-                    className="flex items-center gap-2 px-4 py-2 bg-white rounded-full text-[10px] font-black text-slate-900 uppercase tracking-widest shadow-xl hover:bg-slate-50 transition-all"
-                  >
-                    <X size={14} />
-                    Hủy thao tác
-                  </button>
-                </div>
-                <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden p-2">
-                  <Login />
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl border border-slate-100 p-2 z-10"
+        >
+          <Login />
+        </motion.div>
       </div>
     );
   }
+
 
   if (needsProfileSetup) {
     return <ProfileSetupForm onSubmit={setupProfile} />;
@@ -2189,7 +1984,7 @@ function MainApp() {
 
               {/* Platform Footer Branding */}
               <div className="mt-12 w-full flex items-center justify-between opacity-20 grayscale">
-                <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="BMASS" className="h-6 w-auto" />
+                <img src="/icon.png" alt="BMASS" className="h-6 w-auto" />
                 <div className="text-[9px] font-black uppercase tracking-[0.3em] flex items-center gap-3">
                   <span>Secured by BMASS Cloud</span>
                   <div className="w-1.5 h-1.5 bg-white rounded-full" />
@@ -2240,7 +2035,7 @@ function MainApp() {
               <Menu size={24} />
             </button>
             <div className="p-2 bg-blue-50 rounded-xl hidden sm:block">
-              <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-10 w-auto object-contain" />
+              <img src="/icon.png" alt="Logo" className="h-10 w-auto rounded-lg object-contain shadow-sm" />
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900">Bmass Data Converter</h1>
@@ -2292,7 +2087,7 @@ function MainApp() {
               >
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-6 w-auto" />
+                    <img src="/icon.png" alt="Logo" className="h-6 w-auto" />
                     <span className="font-black text-slate-900 tracking-tight text-sm">BMASS</span>
                   </div>
                   <button 
@@ -2330,7 +2125,11 @@ function MainApp() {
                   </button>
                 </div>
                 
-                <div className="p-3 border-t border-slate-100">
+                <div className="p-3 border-t border-slate-100 space-y-3">
+                  <div className="px-3 py-2 bg-slate-50 rounded-xl">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hệ thống được quản trị bởi</p>
+                    <p className="text-[11px] font-bold text-slate-700 mt-0.5">Sơn Lý Hồng Đức</p>
+                  </div>
                   <button 
                     onClick={logout}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-red-600 hover:bg-red-50 rounded-lg transition-all font-bold text-xs"

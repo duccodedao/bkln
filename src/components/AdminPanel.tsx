@@ -609,7 +609,10 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                     <div>
                       <h5 className="text-sm font-bold text-blue-900">Thông tin hệ thống</h5>
                       <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-                        Bạn có thể quản lý người dùng và vai trò trực tiếp từ bảng điều khiển.
+                        Quản trị viên: <span className="font-black">Sơn Lý Hồng Đức</span>
+                      </p>
+                      <p className="text-[10px] text-blue-600 mt-0.5 opacity-80">
+                        Hệ thống BMASS Health - Enterprise Grade Core v2.0
                       </p>
                     </div>
                   </div>

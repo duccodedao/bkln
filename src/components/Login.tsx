@@ -50,7 +50,7 @@ export default function Login() {
   return (
     <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full mx-auto">
       <div className="text-center mb-8">
-          <img src="https://tytpht.hdd.io.vn/img/bmassloadings.png" alt="Logo" className="h-16 w-auto object-contain mx-auto mb-4" />
+          <img src="/icon.png" alt="Logo" className="h-16 w-auto object-contain mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900">Chào mừng trở lại</h2>
           <p className="text-gray-500">Đăng nhập để tiếp tục sử dụng hệ thống</p>
         </div>
@@ -156,7 +156,7 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="mt-8 text-center space-y-2">
+        <div className="mt-8 text-center space-y-4">
           {mode === 'login' ? (
             <>
               <p className="text-sm text-gray-500">
@@ -168,6 +168,13 @@ export default function Login() {
           ) : (
             <button onClick={() => { setMode('login'); setConfirmationResult(null); }} className="text-sm text-blue-600 font-medium hover:underline">Quay lại đăng nhập</button>
           )}
+
+          <div className="pt-4 border-t border-slate-50">
+            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-relaxed">
+              Hệ thống được quản trị bởi <br/>
+              <span className="text-slate-400">Sơn Lý Hồng Đức</span>
+            </p>
+          </div>
         </div>
     </div>
   );
